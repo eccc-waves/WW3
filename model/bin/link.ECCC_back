@@ -85,13 +85,13 @@
 
   comp=s.f90
   libs=""
-  opt="-O3 -ip -o $prog"
-  opt="$opt -no-fma"
+  opt="-o $prog"
+  opt="$opt -O3 -ip -no-fma"
 
   # mpi implementation
   if [ "$mpi_mod" = 'yes' ]
   then
-    comp="$opt -mpi"
+    opt="$opt -mpi"
   fi
 
   # open mpi implementation
