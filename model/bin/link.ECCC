@@ -126,7 +126,7 @@
   fi
 
 # if compilation requires standard file libraries activate
-  if [[ "$prog" = "ww3_prsf" || "$prof" = "ww3_ousf" ]]
+  if [[ "$prog" = "ww3_prsf" || "$prog" = "ww3_ousf" ]]
   then
      libs="$libs -lrmn"
   fi
@@ -175,7 +175,6 @@
         rpath="$rpath ${rprfx}${path//-L/}"
       fi
     done
-  
     $comp $opt $objects $libs $rpath                  > link.out 2> link.err
     OK="$?"
 

@@ -457,6 +457,17 @@
                                    touch w3srcemd.ftn
                                    touch w3wavemd.ftn
                                    touch ww3_grid.ftn ;;
+      'eccpl' ) cd $main_dir/ftn ; touch w3fstdmd.ftn
+                                   touch mod_gemtools.ftn
+                                   touch par_kind.ftn
+                                   touch cpl_RPN.ftn
+                                   touch cpl_RPN_data.ftn
+                                   touch w3initmd.ftn
+                                   touch w3wavemd.ftn
+                                   touch ww3_shel.ftn  ;;
+     'ecdata' ) cd $main_dir/ftn ; touch w3fstdmd.ftn
+                                   touch ww3_prsf.ftn
+                                   touch ww3_ousf.ftn ;;
        *      ) echo "w3_new: keyword [$key] not recognized" ;;
     esac
   done

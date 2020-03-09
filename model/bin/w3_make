@@ -138,6 +138,7 @@
   reg_programs="ww3_grid" 
   reg_programs="$reg_programs ww3_strt"
   reg_programs="$reg_programs ww3_bound"
+  reg_programs="$reg_programs ww3_bounm"
   reg_programs="$reg_programs ww3_outf"
   reg_programs="$reg_programs ww3_outp"
   reg_programs="$reg_programs ww3_trck"
@@ -146,6 +147,12 @@
   reg_programs="$reg_programs gx_outf"
   reg_programs="$reg_programs gx_outp"
   reg_programs="$reg_programs ww3_uprstr" 
+
+  if [ -n "`grep ECD $switch_file`" ]
+  then
+    reg_programs="$reg_programs ww3_prsf"
+    reg_programs="$reg_programs ww3_ousf"
+  fi
 
 # PRNC OUNF OUNP BOUNC TRNC
 # cdf_programs = NetCDF programs

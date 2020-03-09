@@ -99,7 +99,8 @@
               dstress s_ice s_is reflection s_xx \
               wind windx wcor rwind curr currx mgwind mgprop mggse \
               subsec tdyn dss0 pdif tide refrx ig rotag arctic nnt mprf \
-              cou oasis agcm ogcm igcm trknc setup pdlib memck uost rstwind
+              cou oasis agcm ogcm igcm trknc setup pdlib memck uost rstwind \
+              eccpl ecdata
   do
     case $type in
 #sort:mach:
@@ -392,6 +393,16 @@
                ID='unresolved obstacles source term'
                TS='UOST'
                OK='UOST' ;;
+#sort:eccpl:
+      eccpl  ) TY='upto1'
+               ID='EC calls to GOSSSIP for wave-atmosphere coupling'
+               TS='ECO'
+               OK='ECO' ;;
+#sort:ecdata:
+      ecdata  ) TY='upto1'
+               ID='EC read write in RPN standard file format'
+               TS='ECD'
+               OK='ECD' ;;
    esac
 
     n_found='0'
@@ -508,6 +519,8 @@
       memck  ) memck=$sw ;;
       setup  ) setup=$sw ;;
       uost   ) uost=$sw ;;
+      eccpl  ) eccpl=$sw ;;
+      ecdata ) ecdata=$sw ;;
               *    ) ;;
     esac
   done
@@ -822,6 +835,22 @@
    NCC) cplcode='cmp.comm ww.comm'
   esac
 
+  eclibcode_cpl=$NULL
+  cpl_rpne=$NULL
+  case $eccpl in
+   ECO) eclibcode_cpl='w3fstdmd'
+        cpl_rpne='mod_gemtools par_kind cpl_RPN_data cpl_RPN'
+   esac
+
+  ecread=$NULL
+  ecwrite=$NULL
+  eclibcode=$NULL
+  case $ecdata in
+   ECD) eclibcode='w3fstdmd'
+        ecread='ww3_prsf'
+        ecwrite='ww3_ousf'
+   esac
+
   if [ -n "$thread1" ] && [ "$s_nl" = 'NL2' ]
   then
       echo ' '
@@ -860,7 +889,8 @@
 
   progs="ww3_grid ww3_strt ww3_prep ww3_prnc ww3_shel ww3_multi ww3_sbs1
          ww3_outf ww3_outp ww3_trck ww3_trnc ww3_grib gx_outf gx_outp ww3_ounf 
-         ww3_ounp ww3_gspl ww3_gint ww3_bound ww3_bounc ww3_systrk $tideprog"
+         ww3_ounp ww3_gspl ww3_gint ww3_bound ww3_bounc ww3_systrk $tideprog
+         ww3_bounm $ecread $ecwrite"
   progs="$progs ww3_multi_esmf  ww3_uprstr"
   progs="$progs libww3"
   progs="$progs libww3.so"
@@ -889,6 +919,13 @@
              source="$pdlibcode $pdlibyow $db $bt $setupcode $tr $trx $stx $nlx $btx $is wmmdatmd w3parall w3triamd $uostmd"
                  IO='w3iobcmd w3iogrmd w3dispmd w3gsrumd'
                 aux="constants w3servmd w3timemd w3arrymd w3cspcmd" ;;
+     ww3_bounm) IDstring='boundary conditions merging program'
+               core=
+               data='w3gdatmd w3odatmd'
+               prop=
+             source=
+                 IO='w3gsrumd'
+                aux='constants w3servmd w3timemd' ;;
      ww3_bounc) IDstring='NetCDF boundary conditions program'
                core=
                data="w3adatmd $memcode w3gdatmd w3wdatmd w3idatmd w3odatmd"
@@ -926,7 +963,7 @@
                  IO="w3iogrmd w3iogomd w3iopomd w3iotrmd w3iorsmd w3iobcmd $oasismd $agcmmd $ogcmmd $igcmmd"
                  IO="$IO w3iosfmd w3partmd"
                 aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd $cplcode"
-                aux="$aux w3nmlshelmd $pdlibyow" ;;
+                aux="$aux w3nmlshelmd $pdlibyow $eclibcode_cpl" ;;
     ww3_multi|ww3_multi_esmf)
                if [ "$prog" = "ww3_multi" ]
                then
@@ -1087,6 +1124,20 @@
                 IO='w3iogrmd w3iogomd w3iorsmd' 
                aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd" 
                aux="$aux w3parall" ;; 
+    ww3_prsf) IDstring='Field preprocessor'
+               core="$eclibcode w3fldsmd"
+               data='w3gdatmd w3adatmd w3idatmd w3odatmd w3wdatmd'
+               prop=
+             source="w3triamd $stx $nlx $btx"
+                 IO='w3iogrmd'
+                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3gsrumd w3parall" ;;
+     ww3_ousf) IDstring='Gridded output'
+               core="$eclibcode"
+               data='w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+               prop=
+             source="$stx $nlx $btx"
+                 IO='w3iogrmd w3iogomd'
+                aux='constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd w3parall' ;;
     esac
 
     # if esmf is included in program name, then
@@ -1375,6 +1426,11 @@
          'PDLIB_W3PROFSMD'   ) modtest=w3profsmd_pdlib.o ;;
          'W3PARALL'     ) modtest=w3parall.o ;;
          'W3SMCOMD'     ) modtest=w3smcomd.o ;;
+         'W3FSTDMD'     ) modtest=w3fstdmd.o ;;
+         'mod_gemtools' ) modtest=mod_gemtools.o ;;
+         'par_kind'     ) modtest=par_kind.o ;;
+         'cpl_RPN_data' ) modtest=cpl_RPN_data.o ;;
+         'cpl_RPN'      ) modtest=cpl_RPN.o ;;
          *              ) modfound=no ;; 
       esac
 

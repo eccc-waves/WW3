@@ -1,0 +1,2292 @@
+     PROGRAM W3OUSF
+!/
+!/                  +-----------------------------------+
+!/                  | WAVEWATCH III           NOAA/NCEP |
+!/                  |           J. McLean               |
+!/                  |          N.B. Bernier             |
+!/                  |           M. Lepine               |
+!/                  |           B. Pouliot              |
+!/                  | Based on ww3_ounf      FORTRAN 90 |
+!/                  |      and ww3_outf                 |
+!/                  |                                   |
+!/                  | Last update :            Aug-2015 |
+!/                  +-----------------------------------+
+!/
+!/    14-May-2012    : Creation                                   (version 4.04_EC)
+!/    27-June-2013   : Accomodate new structure of output fields  (version 4.11_EC)
+!/    03-March-2014  : Upgrade to                                 (version 4.15_EC)
+!/    15-July-2015   : Verify if field is empty before writing    (version 4.??_EC)
+!/    16-March-2016  : Add reference start, T0M1>TM01, correct    (version 4.??_EC) 
+!/                     mask of DSP0/1/2  
+!/    26-July-2016   : Rotate winds                               (version 4.??_EC) 
+!/    19-August-2016 : Correct: typvar HB/HG, nx index in W3S2XY  (version 4.??_EC) 
+!/                     add check for UNDEF, use rotate_vector for
+!/                     all vector fields, add some missing fields
+!/    19-August-2016 : Fix SETMASK to work for fully masked field (version 5.??_EC)
+!/                     Remove check for UNDEF, add var from 5.16
+!/
+!/    Copyright 2009 National Weather Service (NWS),
+!/       National Oceanic and Atmospheric Administration.  All rights
+!/       reserved.  WAVEWATCH III is a trademark of the NWS.
+!/       No unauthorized use without permission.
+!/
+!  1. Purpose :
+!
+!     Post-processing of grid output to CMC-RPN Standard File Format.
+!  2. Method :
+!
+!     Data is read from the grid output file out_grd.ww3 (raw data)
+!     and from the file ww3_ousf.inp ( NDSI, output requests ).
+!     Model definition and raw data files are read using WAVEWATCH III
+!     subroutines.
+!
+!     Output type(s):
+!     1) CMC Standard File Output
+!
+!  3. Parameters :
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      W3NMOD    Subr. W3GDATMD Set number of model.
+!      W3SETG    Subr.   Id.    Point to selected model.
+!      W3NDAT    Subr. W3WDATMD Set number of model for wave data.
+!      W3SETW    Subr.   Id.    Point to selected model for wave data.
+!      W2NAUX    Subr. W3ADATMD Set number of model for aux data.
+!      W3SETA    Subr.   Id.    Point to selected model for aux data.
+!      ITRACE    Subr. W3SERVMD Subroutine tracing initialization.
+!      STRACE    Subr.   Id.    Subroutine tracing.
+!      NEXTLN    Subr.   Id.    Get next line from input file
+!      EXTCDE    Subr.   Id.    Abort program as graceful as possible.
+!      STME21    Subr. W3TIMEMD Convert time to string.
+!      TICK21    Subr.   Id.    Advance time.
+!      DSEC21    Func.   Id.    Difference between times.
+!      W3IOGR    Subr. W3IOGRMD Reading/writing model definition file.
+!      W3IOGO    Subr. W3IOGOMD Reading/writing raw gridded data file.
+!      W3EXGO    Subr. Internal Execute grid output.
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     None, stand-alone program.
+!
+!  6. Error messages :
+!
+!     Checks on input, checks in W3IOxx.
+!
+!  7. Remarks :
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!     !/S     Enable subroutine tracing.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+      USE CONSTANTS
+ 
+!/
+      USE W3WDATMD, ONLY: W3NDAT, W3SETW
+      USE W3ADATMD, ONLY: W3NAUX, W3SETA
+      USE W3ODATMD, ONLY: W3NOUT, W3SETO
+      USE W3SERVMD, ONLY: ITRACE, NEXTLN, EXTCDE
+      USE W3TIMEMD
+      USE W3IOGRMD, ONLY: W3IOGR
+      USE W3IOGOMD, ONLY: W3IOGO, W3READFLGRD
+!/
+      USE W3GDATMD
+      USE W3WDATMD, ONLY: TIME, WLV, ICE, UST, USTDIR, BERG, ICEH, ICEF
+      USE W3ADATMD, ONLY: DW, UA, UD, AS, CX, CY, HS, WLM, T0M1, THM,  &
+                          THS, FP0, THP0, FP1, THP1, DTDYN, FCUT,      &
+                          ABA, ABD, UBA, UBD, SXX, SYY, SXY, USERO,    &
+                          PHS, PTP, PLP, PDIR, PSI, PWS, PWST, PNR,     &
+                          TAUOX, TAUOY, TAUWIX,                        &
+                          TAUWIY, PHIAW, PHIOC, TUSX, TUSY, PRMS, TPMS,&
+                          USSX, USSY, MSSX, MSSY, MSCX, MSCY, CHARN,   &
+                          TAUWNX, TAUWNY, BHD, T02, CGE,            &
+                          T01, BEDFORMS, WHITECAP, TAUBBL, PHIBBL,     &
+                          CFLTHMAX, CFLXYMAX, CFLKMAX, TAUICE, PHICE,   &
+                          P2SMS, EF, US3D, TH1M, STH1M, TH2M, STH2M, WN, &
+                          HSIG, STMAXE, STMAXD, HMAXE, HCMAXE, HMAXD, HCMAXD
+
+      USE W3ODATMD, ONLY: NDSO, NDSE, NDST, NOGRP, NGRPP, IDOUT, UNDEF,&
+                          FLOGRD, FNMPRE
+      USE W3FSTDMD, ONLY: FSTD_OPEN, FSTD_CLOSE, FSTD_WRITE_FIELD,    &
+                          FSTD_CREATE_GRID, FSTD_GET_VECTOR_ROTATION, &
+                          ROTATE_VECTOR
+!
+      IMPLICIT NONE
+ 
+!/
+!/ ------------------------------------------------------------------- /
+!/ Local parameters
+!/
+      INTEGER                 :: NDSI, NDSM, NDSOG,                        &
+                                 NDSTRC, NTRACE, IERR, I, J,               &
+                                 TOUT(2), TDUM(2), IOTEST, NOUT, IFI, IFJ, &
+                                 IOUT, NBIPART, CNTIPART, RTIME(2),  &
+                                 FSTD_OUT_FORMAT
+      INTEGER                 :: RHOUR
+      INTEGER, ALLOCATABLE    :: TABIPART(:)
+      REAL                    :: DTREQ, DTEST, FHOUR, DIFFSTART
+      CHARACTER(len=1)        :: COMSTR
+      CHARACTER(len=23)       :: IDTIME
+      CHARACTER(len=11)       :: IDDDAY
+      CHARACTER(len=30)       :: STRINGIPART
+      CHARACTER(len=20)       :: RUNDATE
+      CHARACTER(len=20)       :: RUNCYCLE
+      CHARACTER(len=1)        :: DELIMIT="_"
+      LOGICAL                 :: FLREQ(NOGRP,NGRPP), FLOG(NOGRP)
+ 
+ 
+      CHARACTER(len=80)       :: STDFILE_NAME, STDFILE_NAME_PRE, unusedstring
+      INTEGER                 :: IU11
+      LOGICAL                 :: FLFRST
+      INTEGER                 :: NPAK
+      INTEGER                 :: IEXT
+      CHARACTER(len=4)        :: FCST_HR_EXT
+      CHARACTER(len=12)       :: ETIKET
+      CHARACTER(len=1)        :: GRTYP
+      INTEGER                 :: IG1P, IG2P, IG3P, IG4P
+      REAL                    :: XLAT0, XLON0, DLON, DLAT
+      CHARACTER(len=2)        :: TYPVAR
+ 
+!/
+!/ ------------------------------------------------------------------- /
+!/
+! 1.  IO set-up.
+!
+      CALL W3NMOD ( 1, 6, 6 )
+      CALL W3SETG ( 1, 6, 6 )
+      CALL W3NDAT (    6, 6 )
+      CALL W3SETW ( 1, 6, 6 )
+      CALL W3NAUX (    6, 6 )
+      CALL W3SETA ( 1, 6, 6 )
+      CALL W3NOUT (    6, 6 )
+      CALL W3SETO ( 1, 6, 6 )
+!
+      NDSI   = 10
+      NDSM   = 20
+      NDSOG  = 20
+!
+      NDSTRC =  6
+      NTRACE = 10
+      CALL ITRACE ( NDSTRC, NTRACE )
+!
+      WRITE (NDSO,900)
+!
+      J      = LEN_TRIM(FNMPRE)
+      OPEN (NDSI,FILE=FNMPRE(:J)//'ww3_ousf.inp',STATUS='OLD',       &
+            ERR=800,IOSTAT=IERR)
+      READ (NDSI,'(A)',END=801,ERR=802) COMSTR
+      IF (COMSTR==' ') COMSTR = '$'
+      WRITE (NDSO,901) COMSTR
+ 
+ 
+      FLFRST = .TRUE.   ! Flag to indicate first write to standard file
+ 
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! 2.  Read model definition file.
+!
+      CALL W3IOGR ( 'READ', NDSM )
+      WRITE (NDSO,920) GNAME
+!
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! 3.  Read general data and first fields from file
+!
+      CALL W3IOGO ( 'READ', NDSOG, IOTEST )
+!
+      WRITE (NDSO,930)
+      DO IFI=1, NOGRP
+        DO IFJ=1, NGRPP
+          IF ( FLOGRD(IFI,IFJ) ) WRITE (NDSO,931) IDOUT(IFI,IFJ)
+        END DO
+      END DO
+!
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! 4.  Read requests from input file.
+!
+!.....Output times
+!
+!     Reference start date
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+      READ (NDSI,*,END=801,ERR=802) RTIME
+      RHOUR = RTIME(2)/10000
+      CALL STME21 ( RTIME , IDTIME )
+      WRITE (NDSO,939) IDTIME
+!     Output start date
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+      READ (NDSI,*,END=801,ERR=802) TOUT, DTREQ, NOUT
+      DTREQ  = MAX ( 0. , DTREQ )
+      IF ( DTREQ==0. ) NOUT = 1
+      NOUT   = MAX ( 1 , NOUT )
+!
+      CALL STME21 ( TOUT , IDTIME )
+      WRITE (NDSO,940) IDTIME
+!
+!     Difference between start and reference start in hour
+      DIFFSTART = DSEC21(RTIME, TOUT) / 3600.
+      print *,'Debug+ : DIFFSTART=',DIFFSTART
+!
+      TDUM = 0
+      CALL TICK21 ( TDUM , DTREQ )
+      CALL STME21 ( TDUM , IDTIME )
+ 
+      IF ( DTREQ >= 86400. ) THEN
+          WRITE (IDDDAY,'(I10,1X)') INT(DTREQ/86400.)
+      ELSE
+          IDDDAY = '           '
+      END IF
+      IDTIME(1:11) = IDDDAY
+      IDTIME(21:23) = '   '
+      WRITE (NDSO,941) IDTIME, NOUT
+!
+!.....Output fields
+!
+      CALL W3READFLGRD ( NDSI, NDSO, 9, NDSE, COMSTR, FLOG,      &
+                         FLREQ, 1, 1, IERR )
+      IF (IERR.NE.0) GOTO 800
+!
+!....Output of output fields
+!
+      DO IFI=1, NOGRP
+        DO IFJ=1, NGRPP
+          IF ( FLREQ(IFI,IFJ) ) THEN
+            IF ( FLOGRD(IFI,IFJ) ) THEN
+              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici1'
+            ELSE
+              WRITE (NDSO,946) IDOUT(IFI,IFJ), '*** NOT AVAILABLE ***'
+              FLREQ(IFI,IFJ) = .FALSE.
+              END IF
+            END IF
+          END DO
+        END DO
+        IF (FLREQ(2,3) .eqv. .false.) FLREQ(2,4) = .false.     ! patch, if T02 is not available then T0M1 can not be used
+!
+! ... Output type
+!
+!      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici2'
+!      READ (NDSI,*,END=801,ERR=802) FLREQ
+!
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici3'
+      READ (NDSI,'(A)',END=801,ERR=802) STRINGIPART
+      NBIPART=0
+      DO I=1,29
+        IF ((STRINGIPART(I:I+1)=='0').OR.(STRINGIPART(I:I+1)=='1')      &
+            .OR.(STRINGIPART(I:I+1)=='2').OR.(STRINGIPART(I:I+1)=='3')  &
+            .OR.(STRINGIPART(I:I+1)=='4').OR.(STRINGIPART(I:I+1)=='5')) THEN
+          NBIPART=NBIPART+1
+        END IF
+      END DO
+      ALLOCATE(TABIPART(NBIPART))
+      CNTIPART=1
+      DO I=1,29
+        IF ((STRINGIPART(I:I+1)=='0').OR.(STRINGIPART(I:I+1)=='1')      &
+            .OR.(STRINGIPART(I:I+1)=='2').OR.(STRINGIPART(I:I+1)=='3')  &
+            .OR.(STRINGIPART(I:I+1)=='4').OR.(STRINGIPART(I:I+1)=='5')) THEN
+          read(STRINGIPART(I:I+1),'(I1)') TABIPART(CNTIPART)
+          CNTIPART=CNTIPART+1
+        END IF
+      END DO
+ 
+!
+! ... Output of output fields
+!
+      WRITE (NDSO,945)
+!
+      DO IFI=1, NOGRP
+        DO IFJ=1, NGRPP
+          IF ( FLREQ(IFI,IFJ) ) THEN
+            IF ( FLOGRD(IFI,IFJ) ) THEN
+              WRITE (NDSO,946) IDOUT(IFI,IFJ), ' '
+            ELSE
+              WRITE (NDSO,946) IDOUT(IFI,IFJ), '*** NOT AVAILABLE ***'
+              FLREQ(IFI,IFJ) = .FALSE.
+            END IF
+          END IF
+        END DO
+      END DO
+!
+!	  IF ( FLOG(4) ) THEN
+!         IF ( IPART .EQ. 0 ) THEN
+!            WRITE (NDSO,948)
+!         ELSE
+!            WRITE (NDSO,949) IPART
+!         END IF
+!      END IF
+!
+!   c. Standard File Options
+!
+      WRITE (NDSO,4000)
+ 
+      ! Read output file format
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici7'
+      READ (NDSI,*,END=801,ERR=802) FSTD_OUT_FORMAT
+      WRITE (NDSO,4100) FSTD_OUT_FORMAT
+ 
+      ! Read etiket/label (applicable to all records)
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!             WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici8'
+      READ (NDSI,*,END=801,ERR=802) ETIKET
+      WRITE (NDSO,4150) ETIKET
+ 
+      ! Read packing ratio (applicable to all records)
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici9'
+      READ (NDSI,*,END=801,ERR=802) NPAK
+      WRITE (NDSO,4200) NPAK
+ 
+      ! Read grid type (applicable to all records)
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici10'
+      READ (NDSI,*,END=801,ERR=802) GRTYP
+      WRITE (NDSO,4250) GRTYP
+
+      ! Read grid info for ZE grids, 0 for ZL grids
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici10b'
+      READ (NDSI,*,END=801,ERR=802) IG1P, IG2P, IG3P, IG4P, XLON0, XLAT0, DLON, DLAT
+      WRITE (NDSO,4275) IG1P, IG2P, IG3P, IG4P, XLON0, XLAT0, DLON, DLAT
+
+      ! Read field type (applicable to all records)
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici11'
+      READ (NDSI,*,END=801,ERR=802) TYPVAR
+      WRITE (NDSO,4300) TYPVAR
+ 
+      ! Define the date of the run cycle for the filename
+      WRITE(RUNDATE,'(I20.8)') RTIME(1)
+      RUNDATE=trim(adjustl(RUNDATE))
+      WRITE (NDSO,4350) RUNDATE
+ 
+      WRITE(RUNCYCLE,'(I20.2)') RHOUR
+      RUNCYCLE=trim(adjustl(RUNCYCLE))
+      RUNCYCLE=RUNCYCLE(1:2)
+      WRITE (NDSO,4400) RUNCYCLE,'Z'
+ 
+      ! Set the standard file prefix name
+      STDFILE_NAME_PRE = trim(adjustl(RUNDATE))//trim(adjustl(RUNCYCLE))
+ 
+      IF ( FSTD_OUT_FORMAT == 0 ) THEN
+         STDFILE_NAME = STDFILE_NAME_PRE
+         WRITE (NDSO,4450) STDFILE_NAME
+      END IF
+ 
+      IU11 = 11
+!
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! 5.  Time management.
+!
+      IOUT   = 0
+      WRITE (NDSO,970)
+ 
+!
+      DO
+        DTEST  = DSEC21 ( TIME , TOUT )
+ 
+        IF ( DTEST > 0. ) THEN
+            CALL W3IOGO ( 'READ', NDSOG, IOTEST )
+              IF ( IOTEST == -1 ) THEN
+                WRITE (NDSO,944)
+                GOTO 888
+              END IF
+            CYCLE
+        END IF ! DTEST
+        IF ( DTEST < 0. ) THEN
+            CALL TICK21 ( TOUT , DTREQ )
+            CYCLE
+        END IF
+!
+        !IOUT   = IOUT + 1
+        CALL STME21 ( TOUT , IDTIME )
+        WRITE (NDSO,971) IDTIME
+ 
+        IF ( FSTD_OUT_FORMAT == 1 ) THEN
+ 
+          ! Flag to indicate first write to standard file
+          FLFRST = .TRUE.
+
+          FHOUR = (IOUT*DTREQ)/3600. + DIFFSTART
+          IEXT = CEILING(FHOUR)
+          ! Define the file extension
+          WRITE(FCST_HR_EXT,'(I4.3)') IEXT
+          print *,'Debug+ iout=',iout,'fhour=',fhour,'fcst_hr_ext=',fcst_hr_ext
+ 
+          ! Define the full file name based on model runtime and forecast hour
+          STDFILE_NAME = trim(STDFILE_NAME_PRE)//trim(DELIMIT)//trim(adjustl(FCST_HR_EXT))
+          WRITE (NDSO,4450) STDFILE_NAME
+
+        END IF
+ 
+        CALL W3EXSF ( NX, NY, NSEA, RTIME, TOUT, FLFRST, GRTYP, ETIKET, &
+                      IG1P, IG2P, IG3P, IG4P, XLON0, XLAT0, DLON, DLAT)
+
+        ! Increment the forecast step
+        IOUT   = IOUT + 1
+ 
+        CALL TICK21 ( TOUT , DTREQ )
+        IF ( IOUT >= NOUT ) EXIT
+      END DO
+STOP
+ 
+ 
+      GOTO 888
+!
+! Escape locations read errors :
+!
+  800 CONTINUE
+      WRITE (NDSE,1000) IERR
+      CALL EXTCDE ( 10 )
+!
+  801 CONTINUE
+      WRITE (NDSE,1001)
+      CALL EXTCDE ( 11 )
+!
+  802 CONTINUE
+      WRITE (NDSE,1002) IERR
+      CALL EXTCDE ( 12 )
+!
+  888 CONTINUE
+      WRITE (NDSO,999)
+!
+! Formats
+!
+  900 FORMAT (/15X,'   *** WAVEWATCH III Field output postp. ***   '/ &
+               15X,'==============================================='/)
+  901 FORMAT ( '  Comment character is ''',A,''''/)
+!
+  920 FORMAT ( '  Grid name : ',A/)
+!
+  930 FORMAT ( '  Fields in file : '/                                 &
+               ' --------------------------')
+  931 FORMAT ( '      ',A)
+!
+  939 FORMAT (/'  Output time data : '/                               &
+               ' --------------------------------------------------'/ &
+               '      Ref. start time    : ',A)
+  940 FORMAT ( '      First time         : ',A)
+  941 FORMAT ( '      Interval           : ',A/                       &
+               '      Number of requests : ',I4)
+  942 FORMAT (/'  Output type ',I2,' :'/                              &
+               ' --------------------------------------------------'/ &
+               '      ',A/)
+  943 FORMAT ( '      Data for ',A)
+  944 FORMAT (/'      End of file reached '/)
+!
+  945 FORMAT (/'  Requested output fields : '/                        &
+               ' --------------------------------------------------')
+ 2945 FORMAT (/'  Output files and fields : '/                        &
+               ' --------------------------------------------------')
+  946 FORMAT ( '      ',A,2X,A)
+ 2946 FORMAT ( '      ',A,' : ',A)
+ 2947 FORMAT ( ' Statistics of ',A/                                   &
+               '   (time, min, max, avg, std)'/)
+  948 FORMAT (/'         Partitioned field data for wind seas')
+  949 FORMAT (/'         Partitioned field data for swell field',I2)
+!
+ 1940 FORMAT ( '      X range and interval : ',3I5/                   &
+               '      Y range and interval : ',3I5)
+ 1941 FORMAT ( '      Data is normalized ')
+!
+ 2940 FORMAT ( '      X range : ',2I5/                                &
+               '      Y range : ',2I5)
+!
+ 3940 FORMAT ( '      X range          : ',2I5/                       &
+               '      Y range          : ',2I5/                       &
+               '      Layout indicator : ',I5/                        &
+               '      Format indicator : ',I5)
+ 
+ 4000 FORMAT (/'  Standard File Data : '/                           &
+               ' --------------------------------------------------')
+ 4100 FORMAT ('       Output Format: ',I1)
+ 4150 FORMAT ('       File Identifier (Etiket): ',A)
+ 4200 FORMAT ('       Packing Ratio (Npak): ',I3)
+ 4250 FORMAT ('       Grid Type (Grtyp): ',A)
+ 4275 FORMAT ('       Positional records grid descriptors '/          &
+              '       (IG1 IG2 IG3 IG4): ',I5,' ',I5,' ',I5,' ',I5/   &
+              '       (XLON0 XLAT0 DLON DLAT): ',F7.3,' ',F7.3,' ',F6.3,' ',F6.3)
+ 4300 FORMAT ('       Variable Type (Typvar): ',A)
+ 4350 FORMAT ('       Run Date (YYYYMMDD): ',A)
+ 4400 FORMAT ('       Run Cycle (HH): ',A2,A)
+ 4450 FORMAT ('       Standard File Name: ',A)
+ !4500 FORMAT ('       Grid Definition ID: ',I)
+!
+  950 FORMAT (//'  Output for ',A/                                    &
+               ' --------------------------------------------------')
+!
+  970 FORMAT (//'  Generating files '/                                &
+               ' --------------------------------------------------')
+  971 FORMAT ( '      Files for ',A)
+  972 FORMAT ( ' ')
+!
+  999 FORMAT (/'  End of program '/                                   &
+               ' ========================================='/          &
+               '         WAVEWATCH III Field output '/)
+!
+ 1000 FORMAT (/' *** WAVEWATCH III ERROR IN W3OUSF : '/               &
+               '     ERROR IN OPENING INPUT FILE'/                    &
+               '     IOSTAT =',I5/)
+!
+ 1001 FORMAT (/' *** WAVEWATCH III ERROR IN W3OUSF : '/               &
+               '     PREMATURE END OF INPUT FILE'/)
+!
+ 1002 FORMAT (/' *** WAVEWATCH III ERROR IN W3OUSF : '/               &
+               '     ERROR IN READING FROM INPUT FILE'/               &
+               '     IOSTAT =',I5/)
+!
+ 1010 FORMAT (/' *** WAVEWATCH III ERROR IN W3OUSF : '/               &
+               '     ILLEGAL TYPE, NCTYPE =',I4/)
+ 
+ 
+CONTAINS
+ 
+!/ ------------------------------------------------------------------- /
+!/
+!/ Internal subroutine W3EXSF ---------------------------------------- /
+!/
+!/ ------------------------------------------------------------------- /
+    SUBROUTINE W3EXSF ( NX, NY, NSEA, RTIME, TOUT, FLFRST, GRTYP, ETIKET, &
+                        IG1P, IG2P, IG3P, IG4P, XLON0, XLAT0, DLON, DLAT )
+!/
+!/                  +-----------------------------------+
+!/                  | WAVEWATCH III           NOAA/NCEP |
+!/                  |           Jamie McLean            |
+!/                  |     Based H.L. Tolman W3EXGO code |
+!/                  |                        FORTRAN 90 |
+!/                  | Last update :         27-Jun-2013 |
+!/                  +-----------------------------------+
+!/
+!/    14-May-2012 : Creation                            ( version 4.04_EC )
+!/    27-Jun-2013 : New structure of output fields.     ( version 4.11_EC)
+!/
+!    1. Purpose :
+!
+!     Perform actual grid output in CMC-RPN Standard File format.
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       NX/Y    Int.  I  Grid dimensions.
+!       NSEA    Int.  I  Number of sea points.
+!       FLFRST  Log.  I  Flag for first pass through routine
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!       X1, X2, XX, XY
+!               R.A.  Output fields
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      STRACE    Subr. W3SERVMD Subroutine tracing.
+!      EXTCDE    Subr.   Id.    Abort program as graceful as possible.
+!      W3S2XY    Subr.   Id.    Convert from storage to spatial grid.
+!      FSTECR    Subr.   Id.    CMC-RPN library routine
+!      FSTOUV    Subr.          CMC-RPN library routine
+!      FCLOS     Subr.          CMC-RPN library routine
+!      FSTFRM    Subr.          CMC-RPN library routine
+!      FNOM      Subr.          CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Main program in which it is contained.
+!
+!  6. Error messages :
+!
+!       None.
+!
+!  7. Remarks :
+!
+!     - Note that arrays CX and CY of the main program now contain
+!       the absolute current speed and direction respectively.
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+      USE W3SERVMD, ONLY : W3S2XY
+      USE W3GDATMD, ONLY : MAPSTA, MAPST2, GNAME
+ 
+      IMPLICIT NONE
+ 
+!/
+!/ ------------------------------------------------------------------- /
+!/ Parameter list
+!/
+      INTEGER                 :: NX, NY, NSEA, RTIME(2), TOUT(2)
+      LOGICAL,INTENT(INOUT)   :: FLFRST
+      CHARACTER(len=1), INTENT(IN) :: GRTYP
+      CHARACTER(len=12), INTENT(IN) :: ETIKET
+      INTEGER, INTENT(IN)     :: IG1P, IG2P, IG3P, IG4P ! Positional markers'
+      REAL, INTENT(IN)        :: XLAT0, XLON0, DLON, DLAT
+!/
+!/ ------------------------------------------------------------------- /
+!/ Local parameters
+!/
+      INTEGER                 :: ISEA, IX, IY, IFI, IFJ, IPART
+      INTEGER                 :: MAP(NX,NY), MP2(NX,NY)
+      INTEGER(KIND=2)         :: MAPOUT(NX,NY)
+      INTEGER                 :: FIELDMASK(NX,NY)
+!
+      REAL                    :: FSC
+      REAL                    :: X1(NX,NY), X2(NX,NY), XX(NX,NY), XY(NX,NY)
+ 
+      CHARACTER(len=80):: TYPE
+      CHARACTER(len=80), PARAMETER :: FSTD_TYPE_RO="STD+RND+R/O+OLD"
+      CHARACTER(len=80), PARAMETER :: FSTD_TYPE_WO="STD+RND+R/W+OLD"
+      CHARACTER(len=80), PARAMETER :: FSTD_TYPE_WN="STD+RND+R/W"
+      CHARACTER(len=80), PARAMETER :: FSTD_TYPE_A="STD+RND+APPEND"
+ 
+!     Variables specific to standard file generation
+ 
+      REAL, ALLOCATABLE :: DIRDELTA(:,:) ! Difference between native grid direction and meteorological direction
+      REAL           :: SCAL_PAR ! Scaling parameter...hardcoded for now
+      REAL           :: R4HOUR
+      REAL(KIND=8)   :: R8HOUR
+      INTEGER        :: IDATEV, ITIMEV, IDATEC, ITIMEC
+      INTEGER        :: IDATEO(2)
+      INTEGER        :: IDEET  
+      INTEGER        :: IP1Z, IP2Z, IP3Z, EIP1, EIP2, EIP3
+      INTEGER        :: RUN_DATE, VALID_DATE
+      INTEGER        :: IERR
+      INTEGER, EXTERNAL ::  NEWDATE, FSTECR
+      EXTERNAL       :: DIFDATR, CONVIP
+      CHARACTER(len=4)::NOM1 ! To be defined in ww3_ousf.inp...hardcoded for now
+      CHARACTER(len=4)::NOM2 ! To be defined in ww3_ousf.inp...hardcoded for now
+      INTEGER        :: IG1, IG2, IG3, IG4 ! determined from ZLATLON subroutine
+      INTEGER        :: NPAS
+
+      IDATEC=RTIME(1)     ! Datestamp defined in ww3_ousf.inp
+      ITIMEC=RTIME(2)     ! Timestamp defined in ww3_ousf.inp
+ 
+ 
+      IDATEV=TOUT(1)
+      ITIMEV=TOUT(2)
+ 
+!      print *,'Debug+ DTMAX =',DTMAX
+!      print *,'Debug+ DTCFL =',DTCFL
+      IDEET = DTMAX
+ 
+!/
+!/ ------------------------------------------------------------------- /
+!/
+!
+!-------------------------------------------------------------------
+! 1.  Preparations
+!
+! BP: Set IP3 to 0. Units not needed, they are available in o.dict
+      EIP3 = 0
+! BP: Scaling parameter not currently activated in FSTD_WRITE_FIELD
+      SCAL_PAR = 1.0
+!
+      X1     = UNDEF
+      X2     = UNDEF
+      XX     = UNDEF
+      XY     = UNDEF
+ 
+! Write the grid descriptors and lat/lon boundaries into the standard file
+! for the specified files.
+ 
+! Open the standard file according to file "type"
+      TYPE=FSTD_TYPE_WN
+!      print *,'Debug+ appel a FSTD_OPEN ',IU11,STDFILE_NAME
+      CALL FSTD_OPEN(STDFILE_NAME, IU11, TYPE, IERR)
+
+       IF (FLFRST) THEN
+          FLFRST = .FALSE.
+          TYPE=FSTD_TYPE_WN
+          CALL FSTD_CREATE_GRID (IU11, NX, NY, IDATEC, ITIMEC, &
+                                 XLAT0, XLON0, DLAT, DLON, ETIKET, &
+                                 IP1Z, IP2Z, IP3Z, NPAK, GRTYP, &
+                                 IG1P, IG2P, IG3P, IG4P)
+       END IF
+     IG1 = IP1Z
+     IG2 = IP2Z
+     IG3 = IP3Z
+     IG4 = 0
+ 
+! Set the standard file access type based on the output file format
+ 
+       IF ( FSTD_OUT_FORMAT == 1 ) THEN
+           FLFRST = .TRUE.
+           TYPE=FSTD_TYPE_WN
+       END IF
+ 
+       IF ( FSTD_OUT_FORMAT == 0 ) THEN
+          IF (.NOT. FLFRST) THEN
+             TYPE=FSTD_TYPE_A
+          END IF
+       END IF
+ 
+! Determine valid times of the output fields
+ 
+     ITIMEC=ITIMEC*100
+     ITIMEV=ITIMEV*100
+ 
+     IERR = NEWDATE(VALID_DATE,IDATEV,ITIMEV,3)
+     IERR = NEWDATE(RUN_DATE,RTIME(1),RTIME(2)*100,3)
+     CALL DIFDATR(VALID_DATE,RUN_DATE,R8HOUR)
+
+! Before reference date, set dateo to datev and npas/ip2 to 0
+     IF(R8HOUR .LT. 0.) THEN
+       R4HOUR = 0.
+       NPAS = 0
+       IDATEO = VALID_DATE
+     ELSE
+       R4HOUR = R8HOUR
+       NPAS = (R4HOUR * 3600) / IDEET
+       IDATEO = RUN_DATE ! Set the date-time stamp of the model run
+     END IF
+     call CONVIP( EIP2, R4HOUR, 10, 2, unusedstring, .FALSE. ) 
+     print *,'Debug R4HOUR=',R4HOUR,' EIP2=',EIP2
+     
+     print *,'Debug+ DTREQ=',DTREQ
+     print *,'Debug NPAS=',NPAS
+     
+! Get rotation if needed
+     CALL FSTD_GET_VECTOR_ROTATION(DIRDELTA, NX, NY, GRTYP, &
+                                   IG1, IG2, IG3, IG4, IU11)
+!
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! 2.  Loop over output fields.
+!
+!  First field for output
+!
+ 
+   DO IFI=1, NOGRP
+      DO IFJ=1, NGRPP
+         IF ( FLREQ(IFI,IFJ) ) THEN
+ 
+! 2.a Set output arrays and parameters
+!
+             IF ( IFI ==  1 .AND. IFJ == 1 ) THEN
+                !----------------------------------------------------------------------------
+                ! Water Depth
+                !----------------------------------------------------------------------------
+                NOM1 = "HB"
+                CALL W3S2XY ( NSEA, NSEA, NX, NY, DW(1:NSEA), MAPSF, X1 )
+                CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+                WRITE(NDSO,'(A)') 'Water Depth'
+                CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+                IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             ELSE IF ( IFI  ==  1 .AND. IFJ == 2 ) THEN
+                !----------------------------------------------------------------------------
+                ! Current Velocity
+                !----------------------------------------------------------------------------
+                CALL W3S2XY ( NSEA, NSEA, NX, NY, CX(1:NSEA), MAPSF, XX )
+                CALL W3S2XY ( NSEA, NSEA, NX, NY, CY(1:NSEA), MAPSF, XY )
+                DO IY=1,NY
+                  DO IX=1,NX
+                    CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.001, xx(ix,iy), xy(ix,iy), &
+                                       XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+                  END DO
+                END DO
+                NOM1 = "UU2W"
+                NOM2 = "VV2W"
+                WRITE(NDSO,'(A)') 'Current Velocity'
+                CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+                CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                              ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                              GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+                IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                          0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+                CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+                CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                              ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+                IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                          0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             ELSE IF ( IFI == 1 .AND. IFJ ==  3 ) THEN
+                !.............................................................................
+                ! Wind
+                !.............................................................................
+                CALL W3S2XY ( NSEA, NSEA, NX, NY, UA(1:NSEA), MAPSF, XX )
+                CALL W3S2XY ( NSEA, NSEA, NX, NY, UD(1:NSEA), MAPSF, XY )
+                DO IY=1,NY
+                  DO IX=1,NX
+                    CALL ROTATE_VECTOR(-dirdelta(ix,iy), 1., xx(ix,iy), xy(ix,iy), &
+                                       XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+                  END DO
+                END DO
+            NOM1 = "UD"
+            NOM2 = "VD"
+            EIP1 = 75597472
+            CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+            WRITE(NDSO,'(A)') 'Wind - UU Component'
+            ! Write the UU field to standard file (XX)
+            CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                          ETIKET,IDEET,R4HOUR,EIP1,EIP2,EIP3,SCAL_PAR,         &
+                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                      EIP1,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            ! Set any inactive points (i.e. land to undefined number)
+            CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+ 
+            WRITE(NDSO,'(A)') 'Wind - VV Component'
+            ! Write the VV field to standard file (XY)
+            CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                          ETIKET,IDEET,R4HOUR,EIP1,EIP2,EIP3,SCAL_PAR,         &
+                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                      EIP1,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!                !.............................................................................
+!                ! Wind speed
+!                !.............................................................................
+!                NOM1 = "UV"
+!                NOM2 = "WD"
+                !.............................................................................
+                ! X1 => Wind Modulus
+                ! X2 => Wind Direction
+                !.............................................................................
+!                CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+!                WRITE(NDSO,'(A)') 'Wind Speed - UV'
+!                CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+!                              ETIKET,IDEET,R4HOUR,EIP1,EIP2,EIP3,SCAL_PAR,         &
+!                              GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!                IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!                          0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!            CALL SETMASK(UNDEF,NX,NY,X2,FIELDMASK)
+!            WRITE(NDSO,'(A)') 'Wind Direction'
+!            ! Write the WD field to standard file (X2)
+!            CALL FSTD_WRITE_FIELD(IU11,X2,NX,NY,NOM2,IDATEO,        &
+!                          ETIKET,IDEET,R4HOUR,EIP1,EIP2,EIP3,SCAL_PAR,         &
+!                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!                      0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 1 .AND. IFJ ==  4 ) THEN
+            !.............................................................................
+            ! Air-Sea Temperature Difference
+            !.............................................................................
+            NOM1 = "ASTD"
+            CALL W3S2XY ( NSEA, NSEA, NX, NY, AS(1:NSEA), MAPSF, X1 )
+            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+            WRITE(NDSO,'(A)') 'Air-Sea Temperature Difference'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                          ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                      0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 1 .AND. IFJ ==  5 ) THEN
+            !----------------------------------------------------------------------
+            ! Water Levels
+            !----------------------------------------------------------------------
+            NOM1 = "SSH"
+            CALL W3S2XY ( NSEA, NSEA, NX, NY, WLV   , MAPSF, X1 )
+            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+            WRITE(NDSO,'(A)') 'Water Levels'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 1 .AND. IFJ ==  6 ) THEN
+            !----------------------------------------------------------------------
+            ! Ice Concentration
+            !----------------------------------------------------------------------
+            NOM1 = "GL"
+            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICE, MAPSF, X1 )
+            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+            WRITE(NDSO,'(A)') 'Ice Concentration'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 1 .AND. IFJ ==  7 ) THEN
+            !----------------------------------------------------------------------
+            ! Icebergs Damping
+            !----------------------------------------------------------------------
+            NOM1 = "IBD"
+            CALL W3S2XY ( NSEA, NSEA, NX, NY, BERG, MAPSF, X1 )
+            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+            WRITE(NDSO,'(A)') 'Iceberg Damping'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!/BT4          ELSE IF ( IFI == 1 .AND. IFJ ==  8 ) THEN
+!/BT4            !----------------------------------------------------------------------
+!/BT4            ! Median sediment grain size
+!/BT4            !----------------------------------------------------------------------
+!/BT4            NOM1 = "D50"
+!/BT4            WHERE ( SED_D50.NE.UNDEF) SED_D50 = -LOG(SED_D50/0.001)/LOG(2.) 
+!/BT4            CALL W3S2XY ( NSEA, NSEA, NX, NY, SED_D50, MAPSF, X1 )
+!/BT4            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+!/BT4            WRITE(NDSO,'(A)') 'Median sediment grain size'
+!/BT4            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+!/BT4            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+!/BT4            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!/BT4            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!/BT4            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!/IS2          ELSE IF ( IFI == 1 .AND. IFJ ==  9 ) THEN
+!/IS2             !----------------------------------------------------------------------
+!/IS2             ! Ice thickness
+!/IS2             !----------------------------------------------------------------------
+!/IS2            NOM1 = "I8"
+!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEH, MAPSF, X1 )
+!/IS2            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+!/IS2            WRITE(NDSO,'(A)') 'Ice thickness'
+!/IS2            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+!/IS2            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+!/IS2            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!/IS2            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!/IS2            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!/IS2          ELSE IF ( IFI == 1 .AND. IFJ ==  10 ) THEN
+!/IS2             !----------------------------------------------------------------------
+!/IS2             ! Ice flow diameter
+!/IS2             !----------------------------------------------------------------------
+!/IS2            NOM1 = "IC5"
+!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEF, MAPSF, X1 )
+!/IS2            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+!/IS2            WRITE(NDSO,'(A)') 'Ice flow diameter'
+!/IS2            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+!/IS2            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+!/IS2            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!/IS2            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!/IS2            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Total Significant Wave Height
+             !----------------------------------------------------------------------
+             NOM1 = "WH"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HS , MAPSF, X1 )
+             ! Set any inactive points (i.e. ice and land to undefined number)
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Total Significant Wave Height'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Wavelength
+             !----------------------------------------------------------------------
+             NOM1 = "WLM"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, WLM, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Wavelength'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Wave Period (Tm02)
+             !----------------------------------------------------------------------
+             NOM1 = "T02"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, T02, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Wave Period (T02)'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Wave Period (T0M1)
+             !----------------------------------------------------------------------
+             NOM1 = "TM01"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, T0M1, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Wave Period'//' ('//NOM1//')'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Wave Period (Tm01)
+             !----------------------------------------------------------------------
+             NOM1 = "T01"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, T01, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Wave Period (T01)'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,                      &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  6 ) THEN
+             !----------------------------------------------------------------------
+             ! Peak Frequency
+             !----------------------------------------------------------------------
+             NOM1 = "WFP"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, FP0 , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Peak Frequency'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             ! Peak Period
+             NOM1 = "WTP"
+             DO ISEA=1, NSEA
+                IF ( FP0(ISEA) /= UNDEF ) THEN
+                   FP0(ISEA) = 1.0/FP0(ISEA)
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, FP0 , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Peak Period'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  7 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Wave Direction
+             !----------------------------------------------------------------------
+             NOM1 = "THM"
+             DO ISEA=1, NSEA
+               IF ( THM(ISEA) /= UNDEF )  THEN
+                 THM(ISEA) = MOD ( 630. - RADE*THM(ISEA) , 360. )
+               END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, THM , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Wave Direction'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  8 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Directional Spread
+             !----------------------------------------------------------------------
+             NOM1 = "DSM"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, THS, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Mean Directional Spread'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  9 ) THEN
+             !----------------------------------------------------------------------
+             ! Peak Direction
+             !----------------------------------------------------------------------
+             NOM1 = "WPD"
+             DO ISEA=1, NSEA
+                IF ( THP0(ISEA) /= UNDEF ) THEN
+                   THP0(ISEA) = MOD ( 630-RADE*THP0(ISEA) , 360. )
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, THP0, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Peak Wave Direction'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  10 ) THEN
+             !----------------------------------------------------------------------
+             ! Infragravity height
+             !----------------------------------------------------------------------
+             NOM1 = "HIG"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HSIG, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Infragravity height'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  11 ) THEN
+             !----------------------------------------------------------------------
+             ! Max surface elev (Space-time extreme)
+             !----------------------------------------------------------------------
+             NOM1 = "MXE"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, STMAXE, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Max surface elev (Space-time extreme)'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  12 ) THEN
+             !----------------------------------------------------------------------
+             ! St Dev of max surface elev
+             !----------------------------------------------------------------------
+             NOM1 = "MXES"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, STMAXD, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'St Dev of max surface elev'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  13 ) THEN
+             !----------------------------------------------------------------------
+             ! Max wave height
+             !----------------------------------------------------------------------
+             NOM1 = "MXH"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HMAXE, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Max wave height'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  14 ) THEN
+             !----------------------------------------------------------------------
+             ! Max wave height from crest
+             !----------------------------------------------------------------------
+             NOM1 = "MXHC"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HCMAXE, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Max wave height from crest'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  15 ) THEN
+             !----------------------------------------------------------------------
+             ! St Dev of MXC
+             !----------------------------------------------------------------------
+             NOM1 = "SDMH"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HMAXD, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'St Dev of MXC'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 2 .AND. IFJ ==  16 ) THEN
+             !----------------------------------------------------------------------
+             ! St Dev of MXHC
+             !----------------------------------------------------------------------
+             NOM1 = "SDMHC"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, HCMAXD, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'St Dev of MXHC'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,         &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!          ELSE IF ( IFI == 2 .AND. IFJ ==  16 ) THEN
+! WBT
+          ELSE IF ( IFI == 4 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Height - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "WHP0"
+!             NOM2 = "SZ"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Significant Wave Height - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             ! Total Swell Height
+!             WRITE(NDSO,'(A,I1,A)') 'Total swell height: ]'//' ('//NOM2//')'
+!             CALL W3S2XY ( NSEA, NSEA, NX, NY, HS, MAPSF, X2 )
+!             DO IY=1,NY
+!               DO IX=1,NX
+!                 IF(X2(IX,IY) .EQ. UNDEF) THEN ! No waves
+!                   XX(IX,IY) = UNDEF
+!                 ELSE IF(X1(IX,IY) .EQ. UNDEF) THEN ! Only swells
+!                   XX(IX,IY) = X2(IX,IY)
+!                 ELSE IF(X1(IX,IY) .EQ. X2(IX,IY)) THEN ! All wind wave
+!                   XX(IX,IY) = UNDEF
+!                 ELSE
+!                   XX(IX,IY) = SQRT(X2(IX,IY)**2 - X1**2)
+!                 END IF
+!               END DO
+!             END DO
+!             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+!             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM2,IDATEO,        &
+!                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+!                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Wave Height - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "WHP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Significant Wave Height - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Wave Height - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "WHP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Significant Wave Height - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Peak Period - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "TPP0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak Period - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Peak Period - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "TPP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak Period - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Peak Period - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2 
+             NOM1 = "TPP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak Period - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Mean Wavelength - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "WLP0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PLP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wavelength - Wind Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Mean Wavelength - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "WLP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PLP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wavelength - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Mean Wavelength - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "WLP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PLP(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wavelength - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Mean Direction - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "THP0"
+             DO ISEA=1, NSEA
+                IF ( PDIR(ISEA,IPART) /= UNDEF ) THEN
+                   PDIR(ISEA,IPART) = MOD ( 630-RADE*PDIR(ISEA,IPART) , 360. )
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PDIR(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wave Direction - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Mean Direction - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "THP1"
+             DO ISEA=1, NSEA
+                IF ( PDIR(ISEA,IPART) /= UNDEF ) THEN
+                   PDIR(ISEA,IPART) = MOD ( 630-RADE*PDIR(ISEA,IPART) , 360. )
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PDIR(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wave Direction - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Mean Direction - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "THP2"
+             DO ISEA=1, NSEA
+                IF ( PDIR(ISEA,IPART) /= UNDEF ) THEN
+                   PDIR(ISEA,IPART) = MOD ( 630-RADE*PDIR(ISEA,IPART) , 360. )
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PDIR(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean Wave Direction - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Directional Spread - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "DSP0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PSI(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Directional Spread - Wind Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Directional Spread - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "DSP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PSI(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Directional Spread - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Directional Spread - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "DSP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PSI(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Directional Spread - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  6 ) THEN
+             !----------------------------------------------------------------------
+             ! Fractional Coverage of Wind Waves - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "WSP0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PWS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Fractional Coverage - Wind Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Fractional Coverage of Primary Swell - IPART=1
+             !----------------------------------------------------------------------
+             IPART=1
+             NOM1 = "WSP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PWS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Fractional Coverage - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Fractional Coverage of Sedondary Swell - IPART=2
+             !----------------------------------------------------------------------
+             IPART=2
+             NOM1 = "WSP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PWS(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Fractional Coverage - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  16 ) THEN
+             !----------------------------------------------------------------------
+             ! Total Wind Sea Fraction
+             !----------------------------------------------------------------------
+             NOM1 = "WSTF"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PWST(:), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Total Wind Sea Fraction'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  17 ) THEN
+             !----------------------------------------------------------------------
+             ! Number of wave partitions
+             !----------------------------------------------------------------------
+             NOM1 = "PNUM"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PNR(:), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Number of Wave Partitions'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Friction velocity
+             !----------------------------------------------------------------------
+             NOM1 = "UE"
+             NOM2 = "UED"
+             CALL W3S2XY (NSEA,NSEA,NX,NY, UST   (1:NSEA) , MAPSF, XX )
+             CALL W3S2XY (NSEA,NSEA,NX,NY, USTDIR(1:NSEA) , MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Friction velocity'
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,X2,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X2,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Charnock Parameter
+             !----------------------------------------------------------------------
+             NOM1 = "CDW"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CHARN(1:NSEA), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Charnock Parameter'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                          ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                      0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave Energy Flux
+             !----------------------------------------------------------------------
+             NOM1 = "CGE"
+             ! from W / m to kW / m
+             DO ISEA=1, NSEA
+                 IF ( CGE(ISEA) .NE. UNDEF )                       &
+                      CGE(ISEA) = 0.001 * CGE(ISEA)
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CGE, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Wave Energy Flux'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,   &
+                                   ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR, &
+                                   GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,  &
+                           0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Air-sea Energy Flux
+             !----------------------------------------------------------------------
+              NOM1 = "FAW"
+              DO ISEA=1, NSEA
+                 PHIAW(ISEA)=MIN(99.98,PHIAW(ISEA))
+              END DO
+              CALL W3S2XY ( NSEA, NSEA, NX, NY, PHIAW(1:NSEA) , MAPSF, X1 )
+              CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+              WRITE(NDSO,'(A)') 'Air-Sea Energy Flux'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                          ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                          GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                      0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave Supported Wind Stress
+             !----------------------------------------------------------------------
+             NOM1 = "UTAW"
+             NOM2 = "VTAW"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUWIX(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUWIY(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Wave Supported Wind Stress'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  6 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave to Wind Stress
+             !----------------------------------------------------------------------
+             NOM1 = "UTAN"
+             NOM2 = "VTAN"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUWNX(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUWNY(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Wave to Wind Stress'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  7 ) THEN
+             !----------------------------------------------------------------------
+             ! Whitecap Coverage
+             !----------------------------------------------------------------------
+             NOM1 = "WCC"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, WHITECAP(1:NSEA,1), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Whitecap Coverage'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  8 ) THEN
+             !----------------------------------------------------------------------
+             ! Whitecap Foam Thickness
+             !----------------------------------------------------------------------
+             NOM1 = "WCF"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, WHITECAP(1:NSEA,2), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Whitecap Foam Thickness'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  9 ) THEN
+             !----------------------------------------------------------------------
+             ! Significant Breaking Wave Height
+             !----------------------------------------------------------------------
+             NOM1 = "WCH"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, WHITECAP(1:NSEA,3), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Significant Breaking Wave Height'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 5 .AND. IFJ ==  10 ) THEN
+             !----------------------------------------------------------------------
+             ! Whitecap Moment
+             !----------------------------------------------------------------------
+             NOM1 = "WCM"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, WHITECAP(1:NSEA,4), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Whitecap Moment'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Radiation Stress
+             !----------------------------------------------------------------------
+             NOM1 = "SXX"
+             NOM2 = "SYY"
+             WRITE(NDSO,'(A)') 'Radiation Stress'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, SXX(1:NSEA), MAPSF, XX )
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, SYY(1:NSEA), MAPSF, XY )
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             NOM1 = "SXY"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, SXY(1:NSEA), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave to Bottom Boundary Layer Stress
+             !----------------------------------------------------------------------
+             NOM1 = "UTAO"
+             NOM2 = "VTAO"
+             WRITE(NDSO,'(A)') 'Wave to Bottom Boundary Layer Stress'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUOX(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUOY(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Radiation Pressure (Bernouilli Head)
+             !----------------------------------------------------------------------
+             NOM1 = "BHD"
+             WRITE(NDSO,'(A)') 'Radiation Pressure (Bernouilli Head)'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, BHD(1:NSEA), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave to Ocean Energy Flux
+             !----------------------------------------------------------------------
+             NOM1 = "FWO"
+             WRITE(NDSO,'(A)') 'Wave to Ocean Energy Flux'
+             DO ISEA=1, NSEA
+                PHIOC(ISEA)=MIN(1000.,PHIOC(ISEA))
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHIOC(1:NSEA), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Stokes Transport
+             !----------------------------------------------------------------------
+             NOM1 = "UST"
+             NOM2 = "VST"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY,TUSX,MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY,TUSY,MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Stokes Transport'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  6 ) THEN
+             !----------------------------------------------------------------------
+             ! Surface Stokes Drift
+             !----------------------------------------------------------------------
+             NOM1 = "USD"
+             NOM2 = "VSD"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, USSX(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, USSY(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Surface Stokes Drift'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI .EQ. 6 .AND. IFJ .EQ. 7 ) THEN
+             !----------------------------------------------------------------------
+             ! Second-order sum pressure
+             !----------------------------------------------------------------------
+             NOM1="P2S"
+!             NOM2="P2ST"
+             WRITE(NDSO,'(A)') 'Second-order sum pressure'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PRMS, MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!             CALL W3S2XY ( NSEA, NSEA, NX, NY, TPMS, MAPSF, X2 )
+!             CALL SETMASK(UNDEF,NX,NY,X2,FIELDMASK)
+!             CALL FSTD_WRITE_FIELD(IU11,X2,NX,NY,NOM2,IDATEO,        &
+!                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+!                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+!             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+!                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+!          ELSE IF ( IFI == 6 .AND. IFJ ==  8 ) THEN
+             !----------------------------------------------------------------------
+             ! Spectrum of surface Stokes drift
+             !----------------------------------------------------------------------
+!             WRITE(NDSO,'(A)') 'Spectrum of surface Stokes drift'
+!          ELSE IF ( IFI == 6 .AND. IFJ ==  9 ) THEN
+             !----------------------------------------------------------------------
+             ! Micro seism source term
+             !----------------------------------------------------------------------
+!             WRITE(NDSO,'(A)') 'Micro seism source term'
+          ELSE IF ( IFI == 6 .AND. IFJ ==  10 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave to sea ice stress
+             !----------------------------------------------------------------------
+             NOM1 = "UTWI"
+             NOM2 = "VTWI"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUICE(1:NSEA, 1), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUICE(1:NSEA, 2), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             WRITE(NDSO,'(A)') 'Wave to sea ice stress'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 6 .AND. IFJ ==  11 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave to sea ice energy flux
+             !----------------------------------------------------------------------
+             NOM1 = "FIC"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHICE(1:NSEA), MAPSF, XX )
+             WRITE(NDSO,'(A)') 'Wave to sea ice energy flux'
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 7 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Bottom Displacement Amplitude
+             !----------------------------------------------------------------------
+             NOM1 = "BDAX"
+             NOM2 = "BDAY"
+             WRITE(NDSO,'(A)') 'Bottom Displacement Amplitude'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, ABA(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, ABD(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 7 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Bottom Velocity Amplitude
+             !----------------------------------------------------------------------
+             NOM1 = "BVAX"
+             NOM2 = "BVAY"
+             WRITE(NDSO,'(A)') 'Bottom Velocity Amplitude'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, UBA(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, UBD(1:NSEA), MAPSF, XY )
+             DO IY=1,NY
+               DO IX=1,NX
+                 CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
+                                    XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
+               END DO
+             END DO
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 7 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Ripple Wavelength
+             !----------------------------------------------------------------------
+             WRITE(NDSO,'(A)') 'Ripple Wavelength'
+             NOM1 = "RPWL"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, BEDFORMS(1:NSEA,1), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             NOM1 = "RPWX"
+             NOM2 = "RPWY"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, BEDFORMS(1:NSEA,2), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, BEDFORMS(1:NSEA,3), MAPSF, XY )
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 7 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Wave Dissipation in Bottom Boundary Layer
+             !----------------------------------------------------------------------
+             NOM1 = "WDBL"
+             WRITE(NDSO,'(A)') 'Wave Dissipation in Bottom Boundary Layer'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PHIBBL(1:NSEA), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 7 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Momentum Loss in Bottom Boundary Layer
+             !----------------------------------------------------------------------
+             NOM1 = "TABX"
+             NOM2 = "TABY"
+             WRITE(NDSO,'(A)') 'Momentum Loss in Bottom Boundary Layer'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUBBL(1:NSEA,1), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TAUBBL(1:NSEA,2), MAPSF, XY )
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+                           GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+                       0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 8 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Mean Square Slope
+             !----------------------------------------------------------------------
+             NOM1 = "MSSX"
+             NOM2 = "MSSY"
+             WRITE(NDSO,'(A)') 'Mean Square Slope'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, MSSX(1:NSEA), MAPSF, XX )
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3S2XY ( NSEA, NSEA, NX, NY ,MSSY(1:NSEA), MAPSF, XY )
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 8 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Spectral level at high frequency tail
+             !----------------------------------------------------------------------
+             NOM1 = "MSCX"
+             NOM2 = "MSCY"
+             WRITE(NDSO,'(A)') 'Spectral level at high frequency tail'
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, MSCX(1:NSEA), MAPSF, XX )
+             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XX,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, MSCY(1:NSEA), MAPSF, XY )
+             CALL SETMASK(UNDEF,NX,NY,XY,FIELDMASK)
+             CALL FSTD_WRITE_FIELD(IU11,XY,NX,NY,NOM2,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM2,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 9 .AND. IFJ ==  1 ) THEN
+             !----------------------------------------------------------------------
+             ! Average dynamic time step in integration
+             !----------------------------------------------------------------------
+             NOM1 = "DTD"
+             FSC    = 0.1
+             DO ISEA=1, NSEA
+                IF ( DTDYN(ISEA) /= UNDEF ) THEN
+                   DTDYN(ISEA) = DTDYN(ISEA) / FSC
+                   DTDYN(ISEA) = DTDYN(ISEA) / 60.
+                END IF
+             END DO
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, DTDYN , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Average Dynamic Time Step In Integration'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 9 .AND. IFJ ==  2 ) THEN
+             !----------------------------------------------------------------------
+             ! Cut off frequency
+             !----------------------------------------------------------------------
+             NOM1 = "FCUT"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, FCUT  , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Low Frequency Cut-off'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 9 .AND. IFJ ==  3 ) THEN
+             !----------------------------------------------------------------------
+             ! Maximum CFL for spatial advection
+             !----------------------------------------------------------------------
+             NOM1 = "CFLS"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CFLXYMAX  , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Maximum CFL for Spatial Advection'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 9 .AND. IFJ ==  4 ) THEN
+             !----------------------------------------------------------------------
+             ! Maximum CFL for directional advection
+             !----------------------------------------------------------------------
+             NOM1 = "CFLT"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CFLTHMAX  , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Maximum CFL for Directional Advection'
+             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+             &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+             IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+             &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE IF ( IFI == 9 .AND. IFJ ==  5 ) THEN
+             !----------------------------------------------------------------------
+             ! Maximum CFL for frequency advection
+             !----------------------------------------------------------------------
+             NOM1 = "CFLK"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CFLKMAX  , MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A)') 'Maximum CFL for Frequency Advection'
+            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
+            IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
+            &         0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
+          ELSE
+              WRITE (NDSE,999) IFI, IFJ
+              CALL EXTCDE ( 1 )
+          END IF ! IFI and IFJ
+!
+! 2.b Make map
+!
+!	  print *,'Debug appel a W3SETMAP en fin de boucle'
+          CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+!
+! ... End of fields loop
+          END IF  ! FLREQ(J)
+        END DO  ! IFJ=1, NGRPP
+     END DO  ! IFI=1, NOGRP
+!
+      CALL FSTD_CLOSE(IU11)
+!
+      RETURN
+!
+! Error escape locations
+!
+  800 CONTINUE
+      WRITE (NDSE,1000) IERR
+      CALL EXTCDE (2)
+!
+! Formats
+!
+  973 FORMAT ( 'NEW CMC-RPN Standard file was created ',A)
+  999 FORMAT (/' *** WAVEWATCH III ERROR IN W3EXSF :'/                &
+               '     PLEASE UPDATE FIELDS !!! '/)
+!
+ 1000 FORMAT (/' *** WAVEWATCH III ERROR IN W3EXSF : '/               &
+               '     ERROR IN OPENING OUTPUT FILE'/                   &
+               '     IOSTAT =',I5/)
+ 
+!/ End of W3EXSF ----------------------------------------------------- /
+!/
+      END SUBROUTINE W3EXSF
+ 
+!--------------------------------------------------------------------------
+!--------------------------------------------------------------------------
+ 
+   SUBROUTINE SETMASK(OUNDEF,NX,NY,XX,FIELDMASK)
+!/
+!/
+!/ ------------------------------------------------------------------- /
+ 
+ 
+    REAL                       ::      OUNDEF
+    REAL,DIMENSION(NX,NY)      ::      XX
+    INTEGER                    ::      IX,IY,NX,NY,NTOTAL
+    INTEGER, DIMENSION(NX,NY)  ::      FIELDMASK
+    LOGICAL, DIMENSION(NX,NY)  ::      LOGIMASK
+    REAL                       ::      LOCALUNDEF,MINV,MAXV
+ 
+!    print *,'Debug SETMASK oundef,nx,ny=',oundef,nx,ny
+    FIELDMASK = 1
+    NTOTAL = 0 
+    LOGIMASK = .true.
+    DO IY=1, NY
+       DO IX=1, NX
+          IF ( XX(IX,IY) == OUNDEF )  THEN
+             FIELDMASK(IX,IY) = 0
+             LOGIMASK(IX,IY) = .false.
+             NTOTAL = NTOTAL + 1
+          END IF
+       END DO
+    END DO
+
+!    print *,'Debug SETMASK apres boucle avant MINV MAXV'
+    IF ( ANY(LOGIMASK) .EQ. .true. ) THEN
+        MINV = MINVAL(XX,LOGIMASK)
+        MAXV = MAXVAL(XX,LOGIMASK)
+!        print *,'Debug MINV=',MINV,' MAXV=',MAXV
+        LOCALUNDEF = (MAXV - MINV) * .01 + MAXV
+    ELSE
+        LOCALUNDEF = 0.0
+    END IF
+!    print *,'Debug LOCALUNDEF=',LOCALUNDEF
+    NTOTAL = 0 
+    DO IY=1, NY
+       DO IX=1, NX
+          IF ( FIELDMASK(IX,IY) == 0 )  THEN
+             XX(IX,IY) = LOCALUNDEF
+             NTOTAL = NTOTAL + 1
+          END IF
+       END DO
+    END DO
+!    PRINT *,'Debug SETMASK, NTOTAL=',NTOTAL
+ 
+    RETURN
+ 
+  END SUBROUTINE SETMASK
+ 
+ 
+!/
+!/ End of SETMASK Subroutine------------------------------------------ /
+!/
+!/ ------------------------------------------------------------------- /
+ 
+  SUBROUTINE W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,NUNDEF )
+  IMPLICIT NONE
+  INTEGER          :: NX, NY
+  REAL             :: X1(NX,NY), X2(NX,NY),                &
+                      XX(NX,NY), XY(NX,NY)
+  INTEGER(KIND=2)  :: MAPOUT(NX,NY)
+  INTEGER          :: MAP(NX,NY), MP2(NX,NY)
+  REAL             :: NUNDEF
+ 
+!/
+!/
+!/ ------------------------------------------------------------------- /
+  INTEGER :: IX,IY
+  DO IY=1, NY
+    DO IX=1, NX
+      MAPOUT(IX,IY)=INT2(MAPSTA(IY,IX) + 8*MAPST2(IY,IX))
+      IF ( MAPSTA(IY,IX) == 0 ) THEN
+        X1(IX,IY) = UNDEF
+        X2(IX,IY) = UNDEF
+        XX(IX,IY) = UNDEF
+        XY(IX,IY) = UNDEF
+      END IF
+      IF ( X1(IX,IY) == UNDEF ) THEN
+        MAP(IX,IY) = 0
+      ELSE
+        MAP(IX,IY) = 1
+      END IF
+      IF ( X2(IX,IY) == UNDEF ) THEN
+        MP2(IX,IY) = 0
+      ELSE
+        MP2(IX,IY) = 1
+      END IF
+    END DO
+  END DO
+          
+  END SUBROUTINE W3SETMAP
+
+!/
+!/ End of W3SETMAP Subroutine------------------------------------------ /
+!/
+!/ ------------------------------------------------------------------- /
+ 
+  END PROGRAM W3OUSF
+ 
+!/
+!/ End of W3OUSF PROGRAM----------------------------------------------------- /
+!/

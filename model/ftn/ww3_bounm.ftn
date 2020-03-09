@@ -1,0 +1,309 @@
+!/ ------------------------------------------------------------------- /
+      PROGRAM W3BOUNM
+!/
+!/                  +-----------------------------------+
+!/                  | WAVEWATCH III           NOAA/NCEP |
+!/                  |           B. Pouliot              |
+!/                  |                        FORTRAN 90 |
+!/                  | Last update :         30-Jun-2016 |
+!/                  +-----------------------------------+
+!/
+!/    30-Jun-2016 : based on ww3_bound             ( version 4.18_EC )
+!/
+!/    Copyright 2012-2012 National Weather Service (NWS),
+!/       National Oceanic and Atmospheric Administration.  All rights
+!/       reserved.  WAVEWATCH III is a trademark of the NWS. 
+!/       No unauthorized use without permission.
+!/
+!  1. Purpose :
+!
+!     Combines multiple ww3 boundary condition files into one nest.ww3 
+!
+!  2. Method :
+!
+!     Read boundary conditions from a file list. 
+!     Match index of interpolation points 
+!     The boundary conditions are written to the nest.ww3 file
+!
+!  3. Parameters :
+!
+!     Local parameters.
+!     ----------------------------------------------------------------
+!       NDSI    Int.  Input unit number ("ww3_bounm.inp").
+!       ITYPE   Int.  Type of data
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      STRACE    Subr.   Id.    Subroutine tracing.
+!      NEXTLN    Subr.   Id.    Get next line from input filw
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     None, stand-alone program.
+!
+!  6. Error messages :
+!
+!  7. Remarks :
+!
+!  8. Structure :
+!
+!     ----------------------------------------------------
+!        1.a  Set up data structures.
+!        9.   Add offset as needed
+!       10.   Write nest file
+!     ----------------------------------------------------
+!
+!  9. Switches :
+!
+!     !/S     Enable subroutine tracing.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+
+      USE W3SERVMD, ONLY: NEXTLN
+!/S      USE W3SERVMD, ONLY : ITRACE, STRACE
+!/
+      IMPLICIT NONE
+!/
+!/ ------------------------------------------------------------------- /
+!/ Local parameters
+!/
+      INTEGER        :: TIME2(2)
+      CHARACTER               :: COMSTR*1, LINE*80
+      CHARACTER*5   :: INXOUT
+      CHARACTER*10  :: VERTEST  ! = 'III  1.03 '
+      CHARACTER*32  :: IDTST    ! = 'WAVEWATCH III BOUNDARY DATA FILE'
+      CHARACTER*120,     ALLOCATABLE  :: NESTFILES(:)
+      CHARACTER*120 :: FILENAME
+
+      INTEGER   I,JJ,IP,J, IPBPIOFFSET,          &
+                NDSO, NDSE, NDSI, NDSB, NDSS, NDSI2,         &
+                NK1, NTH1, NSPEC1, NBI2, NBI2MAX, NBIOFFSET, &
+                NBIMAX, NBO, NBO2, NNF, IERR, ILOOP, VERBOSE
+!/S      INTEGER NTRACE, NDSTRC
+!/S      INTEGER, SAVE           :: IENT = 0
+      REAL   XFRI, FR1I, TH1I
+      REAL, ALLOCATABLE     :: XBPI(:), YBPI(:), RDBPI(:,:),        &
+                               XBPO(:), YBPO(:), RDBPO(:,:),        &
+                               ABPIN(:,:) 
+      INTEGER,  ALLOCATABLE :: NBI(:), IPBPI(:,:),   IPBPO(:,:)
+!/
+!/ ------------------------------------------------------------------- /
+
+
+!/
+! 1.  IO set-up.
+!
+      NDSO   = 6
+      NDSE   = 6
+      NDSI   = 10
+      NDSB   = 33
+      NDSS   = 17
+!
+!/S      NDSTRC =  6
+!/S      NTRACE = 10
+!/S      CALL ITRACE ( NDSTRC, NTRACE )
+!
+!/S      CALL STRACE (IENT, 'W3BOUNM')
+!
+
+!
+!--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+!
+! 3. Read input file
+!
+      OPEN(NDSI,FILE='ww3_bounm.inp',status='old')
+      READ (NDSI,'(A)',END=2001,ERR=2002) COMSTR
+      IF (COMSTR.EQ.' ') COMSTR = '$'
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+      READ (NDSI,*) INXOUT
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+      READ (NDSI,*) VERBOSE
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!
+!     ILOOP = 1 to count NNF
+!     ILOOP = 2 to read the file names
+!
+      DO ILOOP = 1, 2
+        OPEN (NDSS,FILE='ww3_bounm.scratch',FORM='FORMATTED',          &
+              status='UNKNOWN')
+        IF ( ILOOP .EQ. 1 ) THEN
+          NDSI2 = NDSI
+        ELSE
+          NDSI2 = NDSS
+          ALLOCATE(NESTFILES(NNF))
+        ENDIF
+ 
+        NNF=0
+! Read input file names
+        DO 
+          CALL NEXTLN ( COMSTR , NDSI2 , NDSE )
+          READ (NDSI2,'(A120)') FILENAME
+          JJ     = LEN_TRIM(FILENAME)
+          IF ( ILOOP .EQ. 1 ) THEN
+            BACKSPACE (NDSI)
+            READ (NDSI,'(A)') LINE
+            WRITE (NDSS,'(A)') LINE
+          END IF
+          IF (FILENAME(:JJ).EQ."'STOPSTRING'") EXIT 
+          NNF=NNF+1
+          IF (ILOOP.EQ.1) CYCLE 
+          NESTFILES(NNF)=FILENAME
+        END DO 
+!
+! ... End of ILOOP loop
+!
+        IF ( ILOOP .EQ. 1 ) CLOSE ( NDSS) 
+
+        IF ( ILOOP .EQ. 2 ) CLOSE ( NDSS, STATUS='DELETE' )
+      END DO
+      CLOSE(NDSI)
+
+! 3. Tests the reading of the file
+!
+! Open files
+      IF ( INXOUT.EQ.'WRITE') THEN 
+        OPEN(NDSB,FILE='nest.ww3',FORM='UNFORMATTED',status='unknown')
+      END IF
+      DO IP=1,NNF
+        OPEN(200+IP,FILE=NESTFILES(IP),FORM='UNFORMATTED',status='old')
+      END DO
+
+      NBO = 0
+      NBIMAX = 0
+      ALLOCATE(NBI(NNF))
+      DO IP=1,NNF
+! Read metadata
+        READ(200+IP) IDTST, VERTEST, NK1, NTH1, XFRI, FR1I, TH1I, NBI(IP)
+        NBO = NBO + NBI(IP)
+        NBIMAX = MAX(NBIMAX, NBI(IP))
+        NSPEC1  = NK1 * NTH1
+        WRITE(NDSO,*) "(",IP,")"," FORMAT VERSION: '",VERTEST,"'"
+        WRITE(NDSO,*) "(",IP,")"," FILE TYPE: '",IDTST,"'"  
+        IF (VERBOSE.EQ.1) WRITE(NDSO,'(A,2I5,3F12.6,I5)') 'NK1,NTH1,XFRI, FR1I, TH1I, NBI :', & 
+                    NK1,NTH1,XFRI, FR1I, TH1I, NBI(IP) 
+      END DO
+! Writes header in nest.ww3 file 
+      IF ( INXOUT.EQ.'WRITE') THEN 
+        WRITE(NDSB) IDTST, VERTEST, NK1, NTH1, XFRI, FR1I, TH1I, NBO
+      END IF
+
+      ALLOCATE (XBPI(NBIMAX), YBPI(NBIMAX))
+      ALLOCATE (IPBPI(NBIMAX, 4), RDBPI(NBIMAX, 4))
+      ALLOCATE (XBPO(NBO),YBPO(NBO))
+      ALLOCATE (IPBPO(NBO, 4),RDBPO(NBO, 4))
+
+      NBO2 = 0
+      NBI2MAX = 0
+      NBIOFFSET = 0
+      IPBPIOFFSET = 0
+      DO IP=1,NNF
+! Read interpolation information
+        READ(200+IP) (XBPI(I),I=1,NBI(IP)),            &
+                     (YBPI(I),I=1,NBI(IP)),            &
+                     ((IPBPI(I,J),I=1,NBI(IP)),J=1,4), &
+                     ((RDBPI(I,J),I=1,NBI(IP)),J=1,4)
+        IF (VERBOSE.EQ.1) WRITE(NDSO,*)      'XBPI:',XBPI
+        IF (VERBOSE.EQ.1) WRITE(NDSO,*)      'YBPI:',YBPI
+        IF (VERBOSE.EQ.1) WRITE(NDSO,*)      'IPBPI:'
+        DO I=1,NBI(IP)
+          IF (VERBOSE.EQ.1) WRITE(NDSO,*) I,' interpolated from:',IPBPI(I,1:4)
+          IF (VERBOSE.EQ.1) WRITE(NDSO,*) I,' with coefficient :',RDBPI(I,1:4)
+!
+! Merge the sets of interpolation information into one
+          XBPO(I+NBIOFFSET) = XBPI(I)
+          YBPO(I+NBIOFFSET) = YBPI(I)
+          DO J=1,4
+            IF (IPBPI(I,J).EQ.0) THEN
+              IPBPO(I+NBIOFFSET,J) = IPBPI(I,J)
+            ELSE
+              IPBPO(I+NBIOFFSET,J) = IPBPI(I,J) + IPBPIOFFSET
+            END IF
+          END DO
+          RDBPO(I+NBIOFFSET,:) = RDBPI(I,:)
+        END DO
+
+        NBIOFFSET = NBIOFFSET + NBI(IP)
+        IPBPIOFFSET = IPBPIOFFSET + MAXVAL(IPBPI)
+!
+! Read number of points
+        READ (200+IP) TIME2, NBI2
+        BACKSPACE (200+IP)
+        NBO2 = NBO2 + NBI2
+        NBI2MAX = MAX(NBI2MAX, NBI2)
+      END DO
+!     
+! Writes interpolation information in nest.ww3 file 
+      IF ( INXOUT.EQ.'WRITE') THEN 
+        WRITE(NDSB) (XBPO(I),I=1,NBO),            &
+                    (YBPO(I),I=1,NBO),            &
+                    ((IPBPO(I,J),I=1,NBO),J=1,4), &
+                    ((RDBPO(I,J),I=1,NBO),J=1,4)
+      END IF
+
+      ALLOCATE (ABPIN(NSPEC1,NBI2MAX))
+
+      IERR=0
+      DO WHILE (IERR.EQ.0)
+        DO IP=1,NNF
+! Read time information 
+          READ (200+IP,IOSTAT=IERR) TIME2, NBI2
+          IF (IERR.EQ.0) THEN 
+            IF (VERBOSE.EQ.1) WRITE(NDSO,*) 'TIME2,NBI2:',TIME2, NBI2,IERR      
+            DO I=1, NBI2
+! Read actual data ABPIN one boundary point at a time
+              READ (200+IP,IOSTAT=IERR) ABPIN(:,I)
+            END DO
+! Write actual data
+            IF ( INXOUT.EQ.'WRITE') THEN 
+              WRITE(NDSO,*) '(',IP,') Writing',NBI2,'boundary points for time:', TIME2
+              IF ( IP.EQ.1 ) WRITE(NDSB,IOSTAT=IERR) TIME2, NBO2
+              DO I=1, NBI2
+                WRITE (NDSB) ABPIN(:,I)
+              END DO
+            END IF
+          END IF
+        END DO
+      END DO
+
+      CLOSE(NDSB)
+      DO IP=1,NNF
+        CLOSE(200+IP)
+      END DO
+!
+!
+STOP
+!
+! Escape locations read errors :
+!
+
+ 2001 CONTINUE
+      WRITE (NDSE,1001)
+!
+ 2002 CONTINUE
+      WRITE (NDSE,1002) IERR
+  901 FORMAT (/' *** WAVEWATCH-III ERROR IN W3IOBC :'/                &
+               '     ILEGAL IDSTR, READ : ',A/                        &
+               '                  CHECK : ',A/)
+!
+  920 FORMAT ( '  Grid name : ',A/)
+!
+ 1001 FORMAT (/' *** WAVEWATCH-III ERROR IN W3BOUNM : '/          &
+               '     PREMATURE END OF INPUT FILE'/)
+!
+ 1002 FORMAT (/' *** WAVEWATCH III ERROR IN W3BOUNM: '/           &
+               '     ERROR IN READING ',A,' FROM INPUT FILE'/          &
+               '     IOSTAT =',I5/)
+!
+!/
+!/ End of W3BOUNM ---------------------------------------------------- /
+!/
+      END PROGRAM W3BOUNM
+!/ ------------------------------------------------------------------- /
+
+
