@@ -6,6 +6,7 @@ mod_*
 obj
 obj_*
 exe
+exe_*
 tmp
 tmp_*
 nuopc*.mk
