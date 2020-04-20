@@ -890,7 +890,7 @@
   progs="ww3_grid ww3_strt ww3_prep ww3_prnc ww3_shel ww3_multi ww3_sbs1
          ww3_outf ww3_outp ww3_trck ww3_trnc ww3_grib gx_outf gx_outp ww3_ounf 
          ww3_ounp ww3_gspl ww3_gint ww3_bound ww3_bounc ww3_systrk $tideprog
-         ww3_bounm $ecread $ecwrite"
+         ww3_bounm ww3_rstrt $ecread $ecwrite"
   progs="$progs ww3_multi_esmf  ww3_uprstr"
   progs="$progs libww3"
   progs="$progs libww3.so"
@@ -1124,6 +1124,14 @@
                 IO='w3iogrmd w3iogomd w3iorsmd' 
                aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd" 
                aux="$aux w3parall" ;; 
+     ww3_rstrt) IDstring='Restart File Update time'
+              core=
+	      data='wmmdatmd w3triamd w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+              prop=
+            source="$memcode $pdlibcode $pdlibyow $flx $ln $st $nl $bt $ic $is $db $tr $bs $xx $uostmd"
+                IO='w3iogrmd w3iogomd w3iorsmd'
+               aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd"
+               aux="$aux w3parall" ;;
     ww3_prsf) IDstring='Field preprocessor'
                core="$eclibcode w3fldsmd"
                data='w3gdatmd w3adatmd w3idatmd w3odatmd w3wdatmd'
