@@ -908,7 +908,7 @@ CONTAINS
             ! Ice Concentration
             !----------------------------------------------------------------------
             NOM1 = "GL"
-            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICE, MAPSF, X1 )
+            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICE(1:NSEA), MAPSF, X1 )
             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
             WRITE(NDSO,'(A)') 'Ice Concentration'
             CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
@@ -948,7 +948,7 @@ CONTAINS
 !/IS2             ! Ice thickness
 !/IS2             !----------------------------------------------------------------------
 !/IS2            NOM1 = "I8"
-!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEH, MAPSF, X1 )
+!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEH(1:NSEA), MAPSF, X1 )
 !/IS2            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
 !/IS2            WRITE(NDSO,'(A)') 'Ice thickness'
 !/IS2            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
@@ -961,7 +961,7 @@ CONTAINS
 !/IS2             ! Ice flow diameter
 !/IS2             !----------------------------------------------------------------------
 !/IS2            NOM1 = "IC5"
-!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEF, MAPSF, X1 )
+!/IS2            CALL W3S2XY ( NSEA, NSEA, NX, NY, ICEF(1:NSEA), MAPSF, X1 )
 !/IS2            CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
 !/IS2            WRITE(NDSO,'(A)') 'Ice flow diameter'
 !/IS2            CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
@@ -1572,7 +1572,7 @@ CONTAINS
                  IF ( CGE(ISEA) .NE. UNDEF )                       &
                       CGE(ISEA) = 0.001 * CGE(ISEA)
              END DO
-             CALL W3S2XY ( NSEA, NSEA, NX, NY, CGE, MAPSF, X1 )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, CGE(1:NSEA), MAPSF, X1 )
              CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
              WRITE(NDSO,'(A)') 'Wave Energy Flux'
              CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,   &
@@ -1793,8 +1793,8 @@ CONTAINS
              !----------------------------------------------------------------------
              NOM1 = "UST"
              NOM2 = "VST"
-             CALL W3S2XY ( NSEA, NSEA, NX, NY,TUSX,MAPSF, XX )
-             CALL W3S2XY ( NSEA, NSEA, NX, NY,TUSY,MAPSF, XY )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TUSX(1:NSEA), MAPSF, XX )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, TUSY(1:NSEA), MAPSF, XY )
              DO IY=1,NY
                DO IX=1,NX
                  CALL ROTATE_VECTOR(-dirdelta(ix,iy), 0.0, xx(ix,iy), xy(ix,iy), &
@@ -1848,14 +1848,14 @@ CONTAINS
              NOM1="P2S"
 !             NOM2="P2ST"
              WRITE(NDSO,'(A)') 'Second-order sum pressure'
-             CALL W3S2XY ( NSEA, NSEA, NX, NY, PRMS, MAPSF, X1 )
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PRMS(1:NSEA), MAPSF, X1 )
              CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
              CALL FSTD_WRITE_FIELD(IU11,X1,NX,NY,NOM1,IDATEO,        &
                            ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
                            GRTYP,IG1,IG2,IG3,NPAK,TYPVAR(1:1)//'@')
              IERR = FSTECR(FIELDMASK,FIELDMASK,-1,IU11,IDATEO,IDEET,NPAS,NX,NY,1,   &
                        0,EIP2,EIP3,'@@',NOM1,ETIKET,GRTYP,IG1,IG2,IG3,0,2,.FALSE.)
-!             CALL W3S2XY ( NSEA, NSEA, NX, NY, TPMS, MAPSF, X2 )
+!             CALL W3S2XY ( NSEA, NSEA, NX, NY, TPMS(1:NSEA), MAPSF, X2 )
 !             CALL SETMASK(UNDEF,NX,NY,X2,FIELDMASK)
 !             CALL FSTD_WRITE_FIELD(IU11,X2,NX,NY,NOM2,IDATEO,        &
 !                           ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
