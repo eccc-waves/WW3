@@ -203,6 +203,10 @@
       NBIOFFSET = 0
       IPBPIOFFSET = 0
       DO IP=1,NNF
+        XBPI = 0
+        YBPI = 0
+        IPBPI = 0
+        RDBPI = 0
 ! Read interpolation information
         READ(200+IP) (XBPI(I),I=1,NBI(IP)),            &
                      (YBPI(I),I=1,NBI(IP)),            &
