@@ -421,6 +421,7 @@ then
        [ "$cmplr" == "datarmor_gnu" ] || [ "$cmplr" == "datarmor_gnu_debug" ]       || \
        [ "$cmplr" == "pgi" ] || [ "$cmplr" == "pgi_debug" ]                         || \
        [ "$cmplr" == "datarmor_pgi" ] || [ "$cmplr" == "datarmor_pgi_debug" ]       || \
+       [ "$cmplr" == "cmc_sf90" ] || [ "$cmplr" == "cmc_sf90_debug" ]               || \
        [ "$cmplr" == "ukmo_cray" ] || [ "$cmplr" == "ukmo_cray_debug" ]             || \
        [ "$cmplr" == "ukmo_cray_gnu" ] || [ "$cmplr" == "ukmo_cray_gnu_debug" ]; then
      source $path_b/cmplr.env
@@ -448,6 +449,7 @@ then
        [ "$cmplr" == "datarmor_gnu" ] || [ "$cmplr" == "datarmor_gnu_debug" ]       || \
        [ "$cmplr" == "pgi" ] || [ "$cmplr" == "pgi_debug" ]                         || \
        [ "$cmplr" == "datarmor_pgi" ] || [ "$cmplr" == "datarmor_pgi_debug" ]       || \
+       [ "$cmplr" == "cmc_sf90" ] || [ "$cmplr" == "cmc_sf90_debug" ]               || \
        [ "$cmplr" == "ukmo_cray" ] || [ "$cmplr" == "ukmo_cray_debug" ]             || \
        [ "$cmplr" == "ukmo_cray_gnu" ] || [ "$cmplr" == "ukmo_cray_gnu_debug" ]; then
      source $path_b/cmplr.env

@@ -145,7 +145,12 @@
   reg_programs="$reg_programs ww3_gint"
   reg_programs="$reg_programs gx_outf"
   reg_programs="$reg_programs gx_outp"
-  reg_programs="$reg_programs ww3_uprstr" 
+  reg_programs="$reg_programs ww3_uprstr"
+  reg_programs="$reg_programs ww3_bounm"
+  reg_programs="$reg_programs ww3_rstrt"
+# Require rmnlib
+  reg_programs="$reg_programs ww3_prsf"
+  reg_programs="$reg_programs ww3_ousf"
 
 # PRNC OUNF OUNP BOUNC TRNC
 # cdf_programs = NetCDF programs

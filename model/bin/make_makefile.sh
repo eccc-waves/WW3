@@ -874,6 +874,7 @@
   progs="ww3_grid ww3_strt ww3_prep ww3_prnc ww3_shel ww3_multi ww3_sbs1
          ww3_outf ww3_outp ww3_trck ww3_trnc ww3_grib gx_outf gx_outp ww3_ounf 
          ww3_ounp ww3_gspl ww3_gint ww3_bound ww3_bounc ww3_systrk $tideprog"
+  progs="$progs ww3_bounm ww3_rstrt ww3_ousf ww3_prsf"
   progs="$progs ww3_multi_esmf  ww3_uprstr"
   progs="$progs libww3"
   progs="$progs libww3.so"
@@ -1100,6 +1101,35 @@
                 IO='w3iogrmd w3iogomd w3iorsmd' 
                aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd" 
                aux="$aux w3parall w3nmluprstrmd" ;; 
+     ww3_bounm) IDstring='boundary conditions merging program'
+               core=
+               data='w3gdatmd w3odatmd'
+               prop=
+             source=
+                 IO='w3gsrumd'
+                aux='constants w3servmd w3timemd' ;;
+     ww3_rstrt) IDstring='Restart File Update time'
+              core=
+	      data='wmmdatmd w3triamd w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+              prop=
+            source="$memcode $pdlibcode $pdlibyow $flx $ln $st $nl $bt $ic $is $db $tr $bs $xx $uostmd"
+                IO='w3iogrmd w3iogomd w3iorsmd'
+               aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd"
+               aux="$aux w3parall" ;;
+     ww3_prsf) IDstring='Field preprocessor'
+               core="w3fstdmd w3fldsmd"
+               data='w3gdatmd w3adatmd w3idatmd w3odatmd w3wdatmd'
+               prop=
+             source="w3triamd $stx $nlx $btx"
+                 IO='w3iogrmd'
+                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3gsrumd w3parall" ;;
+     ww3_ousf) IDstring='Gridded output'
+               core="w3fstdmd"
+               data='w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+               prop=
+             source="$stx $nlx $btx"
+                 IO='w3iogrmd w3iogomd'
+                aux='constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd w3parall' ;;
     esac
 
     # if esmf is included in program name, then
@@ -1389,6 +1419,7 @@
          'PDLIB_W3PROFSMD'   ) modtest=w3profsmd_pdlib.o ;;
          'W3PARALL'     ) modtest=w3parall.o ;;
          'W3SMCOMD'     ) modtest=w3smcomd.o ;;
+         'W3FSTDMD'     ) modtest=w3fstdmd.o ;;
          'W3OUNFMETAMD' ) modtest=w3ounfmetamd.o ;;
          *              ) modfound=no ;; 
       esac
