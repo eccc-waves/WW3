@@ -3017,14 +3017,17 @@
           END SELECT
 !
         IF (SUM(UNSTSCHEMES).GT.1) WRITE(NDSO,1035)
-        WRITE (NDSO,2951) PNAME2
+        IF (SUM(UNSTSCHEMES).GE.1) WRITE (NDSO,2951) PNAME2
+
         IF (IMPTOTAL) THEN
           FSTOTALIMP = IMPTOTAL
           PNAME2 = 'N Implicit (Fluctuation Splitting) for total implicit'
+          WRITE (NDSO,2951) PNAME2
         END IF
         IF (EXPTOTAL) THEN
           FSTOTALEXP = EXPTOTAL 
           PNAME2 = 'N Explicit (Fluctuation Splitting) for one exchange explicit DC HPCF '
+          WRITE (NDSO,2951) PNAME2
         END IF
         IF (IMPREFRACTION .and. IMPTOTAL .AND. FLCTH) THEN
           FSREFRACTION = .TRUE.
