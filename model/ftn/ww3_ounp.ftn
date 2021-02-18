@@ -53,6 +53,8 @@
 !/    15-May-2018 : Add namelist feature                ( version 6.05 )
 !/    18-Aug-2018 : S_{ice} IC5 (Q. Liu)                ( version 6.06 )
 !/    18-Jun-2020 : Support for 360-day calendar.       ( version 7.08 )
+!/    18-Feb-2021 : Correct FP0 calc for peak energy in ( version 7.12 )
+!/                  min/max freq band (B. Pouliot, CMC)
 !/
 !/    Copyright 2009 National Weather Service (NWS),
 !/       National Oceanic and Atmospheric Administration.  All rights
@@ -1433,7 +1435,7 @@
 
 !/ Local parameters
 !/
-      INTEGER                 :: J, J1, I1, I2, ISP, IKM, IKL, IKH,    &
+      INTEGER                 :: J, J1, I1, I2, ISP, IKM,              &
                                  ITH, IK, ITT, NPART, IX, IY, ISEA
       INTEGER                 :: CURDATE(8), REFDATE(8)
 !/S      INTEGER, SAVE           :: IENT   = 0
@@ -1790,10 +1792,18 @@
             END IF
           END DO
 !
-          IKL    = MAX (  1 , IKM-1 )
-          IKH    = MIN ( NK , IKM+1 )
-          EL     = E1(IKL) - E1(IKM)
-          EH     = E1(IKH) - E1(IKM)
+          IF ( IKM .EQ. 1 ) THEN
+            EL = - E1(IKM)
+          ELSE
+            EL = E1(IKM-1) - E1(IKM)
+          END IF
+
+          IF ( IKM .EQ. NK ) THEN
+            EH = - E1(IKM)
+          ELSE
+            EH = E1(IKM+1) - E1(IKM)
+          END IF
+
           DENOM  = XL*EH - XH*EL
 !
           IF ( HSIG .GE. HSMIN ) THEN
