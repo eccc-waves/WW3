@@ -116,7 +116,7 @@
           ww3_uprstr ww3_gint $ww3_NetCDF
   mv ../exe/exec_type ../exe/exec_type__SEQ
   cp -r ../exe ../exe__SEQ
-  mv ../tmp ../tmp_SEQ
+#  mv ../tmp ../tmp_SEQ
 
 # --------------------------------------------------------------------------- #
 # 3. Compile MPI codes                                                        #
@@ -133,7 +133,7 @@
   mv ../exe__SEQ/* ../exe
   rm -r ../exe__SEQ
 #  mv ../tmp ../tmp_MPI
-  ln -sf tmp_MPI ../tmp
+#  ln -sf tmp_MPI ../tmp
 
 # --------------------------------------------------------------------------- #
 # 4. Reset switch file                                                        #
