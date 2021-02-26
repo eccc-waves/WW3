@@ -1072,7 +1072,7 @@ END SUBROUTINE FSTD_CLOSE
 !
 !/ ------------------------------------------------------------------- /
  
-      USE W3GDATMD, ONLY: XGRD, YGRD, SX, SY
+      USE W3GDATMD, ONLY: XGRD, YGRD, SX, SY, NTRI, TRIGP
 
       IMPLICIT NONE
  
@@ -1086,16 +1086,17 @@ END SUBROUTINE FSTD_CLOSE
       REAL, DIMENSION(:), ALLOCATABLE:: XAXIS, YAXIS, ZAXIS
       REAL, DIMENSION(:,:), ALLOCATABLE:: LA, LO
 !      REAL, DIMENSION(:), ALLOCATABLE:: XDUMMY, YDUMMY
+      INTEGER, ALLOCATABLE :: TRIGPFLAT (:)
  
       INTEGER  IERR, i, j
-!      INTEGER, EXTERNAL :: FNOM, FSTOUV, FCLOS, FSTFRM, FSTECR_S, FSTECR,FSTLIR, NEWDATE
       INTEGER, EXTERNAL :: FSTECR, NEWDATE
  
       CHARACTER(len=4)::NOMVAR
       CHARACTER(len=2)::TYPVAR
-      CHARACTER(len=1)::GRREF
+      CHARACTER(len=1)::GRREF, GRLALO
  
       INTEGER IP1,IP2,IP3, NK
+      INTEGER NITIC, NJTIC, NITAC, NJTAC
       INTEGER DEET, NPAS, nbits, DATYP
       INTEGER YYYYMMDD,HHMMSSSS, IDATEO
       INTEGER seed
@@ -1104,11 +1105,25 @@ END SUBROUTINE FSTD_CLOSE
       REAL SWLATREF, SWLONREF, DLATREF, DLONREF
       LOGICAL REWRIT
  
+      IF ( GRTYP .EQ. 'M' ) THEN
+        GRLALO = 'Y'
+        NITIC = NI
+        NJTIC = 1
+        NITAC = NI
+        NJTAC = 1
+        ALLOCATE(XAXIS(NI), YAXIS(NI))
+      ELSE
+        GRLALO = 'Z'
+        NITIC = NI
+        NJTIC = 1
+        NITAC = 1
+        NJTAC = NJ
+        ALLOCATE(XAXIS(NI), YAXIS(NJ))
+      END IF
+
       NK  = 1
       ALLOCATE(ZAXIS(NK))
       ZAXIS(1) = 0.
- 
-      ALLOCATE(XAXIS(NI), YAXIS(NJ))
  
 !     Initialization of the necessary standard file parameters
 !     required to write a record
@@ -1118,50 +1133,63 @@ END SUBROUTINE FSTD_CLOSE
       TYPVAR = 'P'
       DATYP  = 134
       REWRIT = .true.
- 
+
 !     Calculate "IDATEO" based on inputs "iDATEc" and "itimec"
  
       YYYYMMDD = IDATEC
       HHMMSSSS = ITIMEC*100
       IERR =  NEWDATE(IDATEO,YYYYMMDD,HHMMSSSS,3)
 
-     IF (IG1 .EQ. 0 .AND. IG2 .EQ. 0 .AND. IG3 .EQ. 0 .AND. IG4 .EQ. 0) THEN
-!      Assume ZL grid
-       GRREF  = 'L'
+      ALLOCATE(LA(NI,NJ), LO(NI,NJ))
+      LA = TRANSPOSE(YGRD)
+      LO = TRANSPOSE(XGRD)
 
-       SWLON = XGRD(1,1)
-       SWLAT = YGRD(1,1)
-       DLON = SX
-       DLAT = SY
+      IF ( GRTYP .EQ. 'M' ) THEN
+        IG(1) = 0
+        IG(2) = 0
+        IG(3) = 0
+        IG(4) = 0
 
-!      Initialisation of the axes values
-       DO i=1,NI
-         XAXIS(i) = SWLON + DLON * (i-1)
-       END DO
+        XAXIS = LO(:, 1)
+        YAXIS = LA(:, 1)
+      ELSE
+        IF (IG1 .EQ. 0 .AND. IG2 .EQ. 0 .AND. IG3 .EQ. 0 .AND. IG4 .EQ. 0) THEN
+!       Assume ZL grid
+          GRREF  = 'L'
+
+          SWLON = XGRD(1,1)
+          SWLAT = YGRD(1,1)
+          DLON = SX
+          DLAT = SY
+
+!         Initialisation of the axes values
+          DO i=1,NI
+            XAXIS(i) = SWLON + DLON * (i-1)
+          END DO
  
-       DO j=1,NJ
-         YAXIS(j) = SWLAT + DLAT * (j-1)
-       END DO
+          DO j=1,NJ
+            YAXIS(j) = SWLAT + DLAT * (j-1)
+          END DO
  
-!      Computation of ig parameters for defining a z-grid in a latlon
-!      space. The values are such that the lat-lon can be encoded
-!      "as is" in the navigational records without supplemental conversion
+!         Computation of ig parameters for defining a z-grid in a latlon
+!         space. The values are such that the lat-lon can be encoded
+!         "as is" in the navigational records without supplemental conversion
 
-       SWLATREF = 0.0
-       SWLONREF = 0.0
-       DLONREF = 1.0
-       DLATREF = 1.0
+          SWLATREF = 0.0
+          SWLONREF = 0.0
+          DLONREF = 1.0
+          DLATREF = 1.0
  
-       CALL CXGAIG('L', IG(1), IG(2), IG(3), IG(4), SWLATREF, SWLONREF,          &
-                   DLATREF, DLONREF)
+          CALL CXGAIG('L', IG(1), IG(2), IG(3), IG(4), SWLATREF, SWLONREF,          &
+                      DLATREF, DLONREF)
 
-     ELSE
-!      Assume ZE grid
-       IG(1) = IG1
-       IG(2) = IG2
-       IG(3) = IG3
-       IG(4) = IG4
-       GRREF  = 'E'
+        ELSE
+!         Assume ZE grid
+          IG(1) = IG1
+          IG(2) = IG2
+          IG(3) = IG3
+          IG(4) = IG4
+          GRREF  = 'E'
 
 !       ALLOCATE(XDUMMY(NI), YDUMMY(NJ))
 !       CALL CIGAXG(grref,XG1,XG2,XG3,XG4,ig1,ig2,ig3,ig4)
@@ -1169,51 +1197,62 @@ END SUBROUTINE FSTD_CLOSE
 !       CALL EZ_GFXYFLL(XAXIS, XDUMMY, xgrd(1,:), ygrd(1,:), 1, xg1, xg2, xg3, xg4)
 !       CALL EZ_GFXYFLL(YDUMMY, YAXIS, xgrd(:,1), ygrd(:,1), 1, xg1, xg2, xg3, xg4)
 
-!      Initialisation of the axes values
-       DO i=1,NI
-         XAXIS(i) = SWLON + DLON * (i-1)
-       END DO
- 
-       DO j=1,NJ
-         YAXIS(j) = SWLAT + DLAT * (j-1)
-       END DO
- 
-     END IF
+!         Initialisation of the axes values
+          DO i=1,NI
+            XAXIS(i) = SWLON + DLON * (i-1)
+          END DO
+
+          DO j=1,NJ
+            YAXIS(j) = SWLAT + DLAT * (j-1)
+          END DO
+
+        END IF
+      END IF
+
 !     Compute unique set of ip1z ip2z from crc checksum of the grid descriptors
-      seed = 0
+     seed = 0
      call descr_signature(IP1Z,IP2Z,IP3Z,seed,xaxis,yaxis,zaxis,ni,nj,1,ig,4)
  
 !     Write the navigational records into the standard file
 !     with full precision (IEEE 32 bits)
  
-    NOMVAR = '>>'
-    IERR=FSTECR(XAXIS, XAXIS, -32, IUN, IDATEO, DEET, NPAS, NI, 1, NK, &
-    &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
-    &           IG(2), IG(3), IG(4), 5, REWRIT)
- 
-    NOMVAR = '^^'
-    IERR=FSTECR(YAXIS, YAXIS, -32, IUN, IDATEO, DEET, NPAS, 1, NJ, NK, &
-    &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
-    &           IG(2), IG(3), IG(4), 5, REWRIT)
+       NOMVAR = '>>'
+       IERR=FSTECR(XAXIS, XAXIS, -32, IUN, IDATEO, DEET, NPAS, NITIC, NJTIC, NK, &
+       &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IG(2), IG(3), IG(4), 5, REWRIT)
+
+
+       NOMVAR = '^^'
+       IERR=FSTECR(YAXIS, YAXIS, -32, IUN, IDATEO, DEET, NPAS, NITAC, NJTAC, NK, &
+       &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IG(2), IG(3), IG(4), 5, REWRIT)
 !
- 
+
+!     Write node list for M grids
+      IF ( GRTYP .EQ. 'M' ) THEN
+        NOMVAR = '##'
+        IF(.NOT. ALLOCATED(TRIGPFLAT)) ALLOCATE(TRIGPFLAT(3*NTRI))
+        TRIGPFLAT = RESHAPE(TRANSPOSE(TRIGP), (/3*NTRI/)) - 1
+
+        IERR=FSTECR(TRIGPFLAT, TRIGPFLAT, -32, IUN, IDATEO, DEET, NPAS,     &
+        &           3*NTRI, 1, 1, IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, &
+        &           'X', IP1Z, IP2Z, IP3Z, 3, 2, REWRIT)
+      END IF
+
 !    Write the contents of 'LA' and 'LO' in the standard file.
  
       IP1 = 0
       IP2 = 0
       IP3 = 0
 
-      ALLOCATE(LA(NI,NJ), LO(NI,NJ))
-      LA = TRANSPOSE(YGRD)
-      LO = TRANSPOSE(XGRD)
       NOMVAR = 'LA'
       IERR=FSTECR(LA, LA, NPAK, IUN, IDATEO, DEET, NPAS, NI, NJ, NK, &
-      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRTYP, IP1Z,    &
+      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
       &           IP2Z, IP3Z, 0, DATYP, REWRIT)
  
       NOMVAR = 'LO'
       IERR=FSTECR(LO, LO, NPAK, IUN, IDATEO, DEET, NPAS, NI, NJ, NK, &
-      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRTYP, IP1Z,    &
+      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
       &           IP2Z, IP3Z, 0, DATYP, REWRIT)
  
      return
