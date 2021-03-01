@@ -41,7 +41,7 @@ CONTAINS
  
  SUBROUTINE FSTD_WRITE_FIELD (IUN,ARRIN1,NI,NJ,NOM1,                        &
   &                           IDATEO,ETIKET,IDEET,RHOUR,IP1,IP2,IP3,        &
-  &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,TYPVAR)
+  &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR)
 !/
 !/                  +-----------------------------------+
 !/                  |           J. McLean               |
@@ -83,6 +83,8 @@ CONTAINS
 !       RHOUR    REAL     REAL FORECAST HOUR (CAN NOW BE A FRACTION OF AN HOUR)
 !       SCAL_PAR REAL      MULTIPLICATION FACTOR
 !       TYPVAR   CHAR      FIELD TYPE(A=Analysis,P=Prognosis,C=Climatology)
+!       NPAK     INT      NUMBER OF BITS TO KEEP (negative of)
+!       DATYP    INT      DATA TYPE
 !
 !     ----------------------------------------------------------------
 !
@@ -139,7 +141,7 @@ CONTAINS
       INTEGER, INTENT(IN)                ::  IP1,IP2,IP3
       REAL,    INTENT(IN)                ::  RHOUR
       INTEGER, INTENT(IN)                ::  IG1,IG2,IG3
-      INTEGER, INTENT(IN)                ::  NPAK
+      INTEGER, INTENT(IN)                ::  NPAK, DATYP
  
       REAL, DIMENSION(NI,NJ),INTENT(IN)  ::  ARRIN1
       REAL, INTENT(IN)                   ::  SCAL_PAR
@@ -149,7 +151,7 @@ CONTAINS
       INTEGER                 ::  NK
       INTEGER                 ::  IG4
       INTEGER                 ::  IERR
-      INTEGER                 ::  NPAS, DATYP
+      INTEGER                 ::  NPAS
       LOGICAL                 ::  REWRIT
  
 !...............................................................
@@ -159,7 +161,6 @@ CONTAINS
       NPAS   = (RHOUR * 3600) / IDEET
 !!! ;-(      REWRIT = .true.   ! To be defined in ww3_ousf.inp...hardcoded for now
       REWRIT = .false.
-      DATYP = 134
  
 ! Create a record in the standard file for the field identified by "NOM1"
       IERR = FSTECR(ARRIN1,ARRIN1,NPAK,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK, &
@@ -991,7 +992,7 @@ END SUBROUTINE FSTD_CLOSE
    SUBROUTINE FSTD_CREATE_GRID (IUN, NI, NJ, IDATEC, ITIMEC, &
                                 SWLAT, SWLON, DLAT, DLON, ETIKET, &
                                 IP1Z, IP2Z, IP3Z, NPAK, GRTYP, &
-                                IG1, IG2, IG3, IG4)
+                                IG1, IG2, IG3, IG4, DATYP, TYPVAR)
 !/
 !/               +-----------------------------------+
 !/               |           J. McLean               |
@@ -1027,6 +1028,12 @@ END SUBROUTINE FSTD_CLOSE
 !       IP3Z      REAL       IG3 value that points to the IP3 value of the grid descriptor
 !       NPAK     INTEGER     Packing ratio of file
 !       GRTYP    CHARACTER   Grid type (L=Lat/Lon Regular Grid)
+!       IG1      INTEGER     IG1 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG2      INTEGER     IG2 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG3      INTEGER     IG3 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG4      INTEGER     IG4 value for ZE grid, 0 for auto-detect of ZL grd
+!       DATYP    INTEGER     Data type
+!       TYPVAR   CHARACTER   Typvar for LA and LO
 !     ----------------------------------------------------------------
 !
 !     Internal parameters
@@ -1076,11 +1083,12 @@ END SUBROUTINE FSTD_CLOSE
 
       IMPLICIT NONE
  
-      INTEGER, INTENT(IN) :: IUN, NI, NJ, IDATEC, ITIMEC, NPAK
+      INTEGER, INTENT(IN) :: IUN, NI, NJ, IDATEC, ITIMEC, NPAK, DATYP
       CHARACTER(len=12), INTENT(IN) :: ETIKET
       INTEGER, INTENT(OUT) :: IP1Z, IP2Z, IP3Z
       CHARACTER(len=1), INTENT(IN) :: GRTYP
       INTEGER, INTENT(IN) :: IG1, IG2, IG3, IG4
+      CHARACTER(len=2), INTENT(IN)::TYPVAR
 
       INTEGER                 ::  IG(4)
       REAL, DIMENSION(:), ALLOCATABLE:: XAXIS, YAXIS, ZAXIS
@@ -1092,12 +1100,12 @@ END SUBROUTINE FSTD_CLOSE
       INTEGER, EXTERNAL :: FSTECR, NEWDATE
  
       CHARACTER(len=4)::NOMVAR
-      CHARACTER(len=2)::TYPVAR
+      CHARACTER(len=2)::TYPVARP
       CHARACTER(len=1)::GRREF, GRLALO
  
       INTEGER IP1,IP2,IP3, NK
       INTEGER NITIC, NJTIC, NITAC, NJTAC
-      INTEGER DEET, NPAS, nbits, DATYP
+      INTEGER DEET, NPAS, nbits
       INTEGER YYYYMMDD,HHMMSSSS, IDATEO
       INTEGER seed
       REAL XG1, XG2, XG3, XG4
@@ -1130,8 +1138,7 @@ END SUBROUTINE FSTD_CLOSE
  
       DEET = 0
       NPAS = 0
-      TYPVAR = 'P'
-      DATYP  = 134
+      TYPVARP = 'X'
       REWRIT = .true.
 
 !     Calculate "IDATEO" based on inputs "iDATEc" and "itimec"
@@ -1145,6 +1152,7 @@ END SUBROUTINE FSTD_CLOSE
       LO = TRANSPOSE(XGRD)
 
       IF ( GRTYP .EQ. 'M' ) THEN
+        GRREF  = 'L'
         IG(1) = 0
         IG(2) = 0
         IG(3) = 0
@@ -1215,16 +1223,16 @@ END SUBROUTINE FSTD_CLOSE
  
 !     Write the navigational records into the standard file
 !     with full precision (IEEE 32 bits)
- 
+
        NOMVAR = '>>'
        IERR=FSTECR(XAXIS, XAXIS, -32, IUN, IDATEO, DEET, NPAS, NITIC, NJTIC, NK, &
-       &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, GRREF, IG(1),  &
        &           IG(2), IG(3), IG(4), 5, REWRIT)
 
 
        NOMVAR = '^^'
        IERR=FSTECR(YAXIS, YAXIS, -32, IUN, IDATEO, DEET, NPAS, NITAC, NJTAC, NK, &
-       &           IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, GRREF, IG(1),  &
        &           IG(2), IG(3), IG(4), 5, REWRIT)
 !
 
@@ -1235,7 +1243,7 @@ END SUBROUTINE FSTD_CLOSE
         TRIGPFLAT = RESHAPE(TRANSPOSE(TRIGP), (/3*NTRI/)) - 1
 
         IERR=FSTECR(TRIGPFLAT, TRIGPFLAT, -32, IUN, IDATEO, DEET, NPAS,     &
-        &           3*NTRI, 1, 1, IP1Z, IP2Z, IP3Z, TYPVAR, NOMVAR, ETIKET, &
+        &           3*NTRI, 1, 1, IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, &
         &           'X', IP1Z, IP2Z, IP3Z, 3, 2, REWRIT)
       END IF
 
