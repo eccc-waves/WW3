@@ -652,31 +652,36 @@ REAL, ALLOCATABLE :: SPDDUMMY(:,:), UNORTH(:,:), VNORTH(:,:)
 !
 INTEGER, EXTERNAL :: EZQKDEF, EZDEFSET, EZWDINT, EZUVINT
 
-! Define grid         
-   GDIN = EZQKDEF(NI, NJ, GRTYP, IG1, IG2, IG3, IG4, IUNIT)
-
-! Define output grid and define grid set
-   ier = EZDEFSET(GDIN, GDIN)
-
-   ALLOCATE(UNORTH(NI,NJ))
-   ALLOCATE(VNORTH(NI,NJ))
-   ALLOCATE(SPDDUMMY(NI,NJ))
    ALLOCATE(DIRDELTA(NI,NJ))
 
-!  Unit north wind at each grid point
-   DO J=1,NJ
-      DO I=1,NI
+   IF(GRTYP .EQ. 'M') THEN
+     DIRDELTA = 0.0
+   ELSE
+     ALLOCATE(UNORTH(NI,NJ))
+     ALLOCATE(VNORTH(NI,NJ))
+     ALLOCATE(SPDDUMMY(NI,NJ))
+
+!    Define grid
+     GDIN = EZQKDEF(NI, NJ, GRTYP, IG1, IG2, IG3, IG4, IUNIT)
+
+!    Define output grid and define grid set
+     ier = EZDEFSET(GDIN, GDIN)
+
+!    Unit north wind at each grid point
+     DO J=1,NJ
+       DO I=1,NI
          VNORTH(I,J) = -1
          UNORTH(I,J) = 0
-      END DO
-   END DO
+       END DO
+     END DO
 
-! EZWDINT crashes unless EZUVINT is executed first; remove when fixed
-   ier = EZUVINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
+!    EZWDINT crashes unless EZUVINT is executed first; remove when fixed
+     ier = EZUVINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
 
-! Convert wind components (in grid direction)
-! to wind speed and wind direction (meteorological)
-   ier = EZWDINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
+!    Convert wind components (in grid direction)
+!    to wind speed and wind direction (meteorological)
+     ier = EZWDINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
+   END IF
 
 END SUBROUTINE FSTD_GET_VECTOR_ROTATION
  
