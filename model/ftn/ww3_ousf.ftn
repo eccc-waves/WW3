@@ -338,12 +338,6 @@
       READ (NDSI,*,END=801,ERR=802) ETIKET
       WRITE (NDSO,4150) ETIKET
  
-      ! Read data type (applicable to all data records)
-      CALL NEXTLN ( COMSTR , NDSI , NDSE )
-!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici9'
-      READ (NDSI,*,END=801,ERR=802) DATYP
-      WRITE (NDSO,4175) DATYP
-
       ! Read packing ratio (applicable to all data records)
       CALL NEXTLN ( COMSTR , NDSI , NDSE )
 !              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici9'
@@ -368,6 +362,12 @@
       READ (NDSI,*,END=801,ERR=802) TYPVAR
       WRITE (NDSO,4300) TYPVAR
  
+      ! Read data type (applicable to all data records)
+      CALL NEXTLN ( COMSTR , NDSI , NDSE )
+!              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici12'
+      READ (NDSI,*,END=801,ERR=802) DATYP
+      WRITE (NDSO,4175) DATYP
+
       ! Define the date of the run cycle for the filename
       WRITE(RUNDATE,'(I20.8)') RTIME(1)
       RUNDATE=trim(adjustl(RUNDATE))
