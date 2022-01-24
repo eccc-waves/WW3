@@ -39,7 +39,7 @@ module w3fstdmd
  
 CONTAINS
  
- SUBROUTINE FSTD_WRITE_FIELD (IUN,ARRIN1,NI,NJ,NOM1,                        &
+ SUBROUTINE FSTD_WRITE_FIELD (IUN,FIELD1,MASK1,NI,NJ,NOM1,                  &
   &                           IDATEO,ETIKET,IDEET,RHOUR,IP1,IP2,IP3,        &
   &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR)
 !/
@@ -71,20 +71,21 @@ CONTAINS
 !       X1, X2, XX, XY
 !               R.A.  Output fields
 !
-!       ARRIN1  REAL      FIRST INPUT ARRAY.
-!       NI      INTEGER   FIRST DIMENSION  OF ARRAY.
-!       NJ      INTEGER   SECOND DIMENSION OF ARRAY.
-!       NOM1    CHAR      VARIABLE NAME.
-!       IDATEO  INTEGER   DATE OF ORIGIN.
-!       ETIKET  CHAR      LABEL.
-!       IDEET   INTEGER   PROPAGATION TIME STEP
+!       FIELD1   REAL      FIELD ARRAY TO OUTPUT.
+!       MASK1    INTEGER   MASK ARRAY TO OUTPUT.
+!       NI       INTEGER   FIRST DIMENSION  OF ARRAY.
+!       NJ       INTEGER   SECOND DIMENSION OF ARRAY.
+!       NOM1     CHAR      VARIABLE NAME.
+!       IDATEO   INTEGER   DATE OF ORIGIN.
+!       ETIKET   CHAR      LABEL.
+!       IDEET    INTEGER   PROPAGATION TIME STEP
 !       IP2      INTEGER   FORECAST HOUR
 !       IP3      INTEGER   FIELD UNITS
-!       RHOUR    REAL     REAL FORECAST HOUR (CAN NOW BE A FRACTION OF AN HOUR)
+!       RHOUR    REAL      REAL FORECAST HOUR (CAN NOW BE A FRACTION OF AN HOUR)
 !       SCAL_PAR REAL      MULTIPLICATION FACTOR
 !       TYPVAR   CHAR      FIELD TYPE(A=Analysis,P=Prognosis,C=Climatology)
-!       NPAK     INT      NUMBER OF BITS TO KEEP (negative of)
-!       DATYP    INT      DATA TYPE
+!       NPAK     INT       NUMBER OF BITS TO KEEP (negative of)
+!       DATYP    INT       DATA TYPE
 !
 !     ----------------------------------------------------------------
 !
@@ -126,7 +127,6 @@ CONTAINS
  
       IMPLICIT NONE
  
-!      INTEGER, EXTERNAL                  ::  FSTECR_S,FSTECR,FNOM,FSTOUV,FCLOS,FSTFRM,FSTLIR
       INTEGER, EXTERNAL                  ::  FSTECR
  
       CHARACTER(len=4), INTENT(IN)       ::  NOM1
@@ -143,16 +143,15 @@ CONTAINS
       INTEGER, INTENT(IN)                ::  IG1,IG2,IG3
       INTEGER, INTENT(IN)                ::  NPAK, DATYP
  
-      REAL, DIMENSION(NI,NJ),INTENT(IN)  ::  ARRIN1
-      REAL, INTENT(IN)                   ::  SCAL_PAR
+      REAL, DIMENSION(NI,NJ),INTENT(IN)    ::  FIELD1
+      INTEGER, DIMENSION(NI,NJ),INTENT(IN) ::  MASK1
+      REAL, INTENT(IN)                     ::  SCAL_PAR
  
 !     Local Variables
  
-      INTEGER                 ::  NK
-      INTEGER                 ::  IG4
-      INTEGER                 ::  IERR
-      INTEGER                 ::  NPAS
-      LOGICAL                 ::  REWRIT
+      INTEGER                   ::  NK, IG4, IERR, NPAS
+      LOGICAL                   ::  REWRIT
+      REAL, DIMENSION(NI,NJ)    ::  FIELD1SP
  
 !...............................................................
  
@@ -162,11 +161,16 @@ CONTAINS
 !!! ;-(      REWRIT = .true.   ! To be defined in ww3_ousf.inp...hardcoded for now
       REWRIT = .false.
  
+      FIELD1SP = SCAL_PAR * FIELD1
+
 ! Create a record in the standard file for the field identified by "NOM1"
-      IERR = FSTECR(ARRIN1,ARRIN1,NPAK,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK, &
-      &                    IP1,IP2,IP3,TYPVAR,NOM1,ETIKET,GRTYP,        &
-      &                    IG1,IG2,IG3,IG4,DATYP,REWRIT)
+      IERR = FSTECR(FIELD1SP,FIELD1,NPAK,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK, &
+                    IP1,IP2,IP3,TYPVAR,NOM1,ETIKET,GRTYP,                &
+                    IG1,IG2,IG3,IG4,DATYP,REWRIT)
  
+      IERR = FSTECR(MASK1,MASK1,-1,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK,     &
+                    IP1,IP2,IP3,'@@',NOM1,ETIKET,GRTYP,                &
+                    IG1,IG2,IG3,IG4,2,REWRIT)
       RETURN
  
 END SUBROUTINE FSTD_WRITE_FIELD
