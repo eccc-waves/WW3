@@ -146,7 +146,7 @@
  
       CHARACTER(len=80)       :: STDFILE_NAME, STDFILE_NAME_PRE, unusedstring
       INTEGER                 :: IU11
-      LOGICAL                 :: FLFRST
+      LOGICAL                 :: FLFRST, FLLAST
       INTEGER                 :: NPAK, DATYP
       INTEGER                 :: IEXT
       CHARACTER(len=4)        :: FCST_HR_EXT
@@ -189,6 +189,7 @@
  
  
       FLFRST = .TRUE.   ! Flag to indicate first write to standard file
+      FLLAST = .FALSE.   ! Flag to indicate last write to standard file
  
 !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ! 2.  Read model definition file.
@@ -330,7 +331,11 @@
       CALL NEXTLN ( COMSTR , NDSI , NDSE )
 !              WRITE (NDSO,946) IDOUT(IFI,IFJ), 'ici7'
       READ (NDSI,*,END=801,ERR=802) FSTD_OUT_FORMAT
-      WRITE (NDSO,4100) FSTD_OUT_FORMAT
+      IF ( FSTD_OUT_FORMAT == 0 ) THEN
+          WRITE (NDSO,4100) FSTD_OUT_FORMAT
+      ELSE
+          WRITE (NDSO,4101) FSTD_OUT_FORMAT
+      END IF
  
       ! Read etiket/label (applicable to all records)
       CALL NEXTLN ( COMSTR , NDSI , NDSE )
@@ -379,7 +384,7 @@
       WRITE (NDSO,4400) RUNCYCLE,'Z'
  
       ! Set the standard file prefix name
-      STDFILE_NAME_PRE = trim(adjustl(RUNDATE))//trim(adjustl(RUNCYCLE))
+      STDFILE_NAME_PRE = trim(adjustl(RUNDATE))//trim(adjustl(RUNCYCLE))//DELIMIT
  
       IF ( FSTD_OUT_FORMAT == 0 ) THEN
          STDFILE_NAME = STDFILE_NAME_PRE
@@ -411,24 +416,51 @@
             CYCLE
         END IF
 !
-        !IOUT   = IOUT + 1
         CALL STME21 ( TOUT , IDTIME )
         WRITE (NDSO,971) IDTIME
  
-        IF ( FSTD_OUT_FORMAT == 1 ) THEN
+        IF ( FSTD_OUT_FORMAT > 0 ) THEN
  
-          ! Flag to indicate first write to standard file
-          FLFRST = .TRUE.
-
           FHOUR = (IOUT*DTREQ)/3600. + DIFFSTART
-          IEXT = CEILING(FHOUR)
-          ! Define the file extension
-          WRITE(FCST_HR_EXT,'(I4.3)') IEXT
+
+          ! Logic to group write to standard file
+
+          IF ( FLLAST ) THEN
+            FLFRST = .TRUE.
+            FLLAST = .FALSE.
+          END IF
+
+          IF ( CEILING(FHOUR) <= 0 ) THEN
+            ! For negative lead time, group 1 hour at a time
+            IF ( ABS(MOD(FHOUR, 1.0)) < 100*EPSILON(FHOUR) ) THEN
+              FLLAST = .TRUE.
+            END IF
+            IEXT = CEILING(FHOUR)
+          ELSE
+            IF ( NINT(DTREQ) >= 3600*FSTD_OUT_FORMAT ) THEN
+              ! Case where we output every lead time individually
+              FLLAST = .TRUE.
+              IEXT = NINT(FHOUR)
+            ELSE
+              ! Case where we output multiple ip2 in one file
+              IF ( ABS ( MOD(FHOUR, REAL(FSTD_OUT_FORMAT)) ) < 100*EPSILON(FHOUR) ) THEN
+                FLLAST = .TRUE.
+                IEXT = NINT(FHOUR)
+              ELSE
+                IEXT = NINT(FHOUR - MOD(FHOUR, REAL(FSTD_OUT_FORMAT))) + FSTD_OUT_FORMAT
+              END IF
+            END IF
+          END IF
+
+          IF ( FLFRST ) THEN
+             ! Define the file extension
+             WRITE(FCST_HR_EXT,'(I4.3)') IEXT
+
+             ! Define the full file name based on model runtime and forecast hour
+             STDFILE_NAME = trim(STDFILE_NAME_PRE)//trim(adjustl(FCST_HR_EXT))
+             WRITE (NDSO,4450) STDFILE_NAME
+          END IF
           print *,'Debug+ iout=',iout,'fhour=',fhour,'fcst_hr_ext=',fcst_hr_ext
- 
-          ! Define the full file name based on model runtime and forecast hour
-          STDFILE_NAME = trim(STDFILE_NAME_PRE)//trim(DELIMIT)//trim(adjustl(FCST_HR_EXT))
-          WRITE (NDSO,4450) STDFILE_NAME
 
         END IF
  
@@ -512,7 +544,8 @@ STOP
  
  4000 FORMAT (/'  Standard File Data : '/                           &
                ' --------------------------------------------------')
- 4100 FORMAT ('       Output Format: ',I1)
+ 4100 FORMAT ('       Group output in a single file: ',I1)
+ 4101 FORMAT ('       Group output by chunks of',I3,' hours')
  4150 FORMAT ('       File Identifier (Etiket): ',A)
  4175 FORMAT ('       Data Type (datyp): ',I3)
  4200 FORMAT ('       Packing Ratio (Npak): ',I3)
@@ -716,13 +749,16 @@ CONTAINS
 ! for the specified files.
  
 ! Open the standard file according to file "type"
-      TYPE=FSTD_TYPE_WN
+       IF (FLFRST) THEN
+          TYPE=FSTD_TYPE_WN
+       ELSE
+          TYPE=FSTD_TYPE_A
+       END IF
 !      print *,'Debug+ appel a FSTD_OPEN ',IU11,STDFILE_NAME
       CALL FSTD_OPEN(STDFILE_NAME, IU11, TYPE, IERR)
 
        IF (FLFRST) THEN
           FLFRST = .FALSE.
-          TYPE=FSTD_TYPE_WN
           CALL FSTD_CREATE_GRID (IU11, NX, NY, IDATEC, ITIMEC, &
                                  XLAT0, XLON0, DLAT, DLON, ETIKET, &
                                  IP1Z, IP2Z, IP3Z, NPAK, GRTYP, &
@@ -732,19 +768,6 @@ CONTAINS
      IG2 = IP2Z
      IG3 = IP3Z
      IG4 = 0
- 
-! Set the standard file access type based on the output file format
- 
-       IF ( FSTD_OUT_FORMAT == 1 ) THEN
-           FLFRST = .TRUE.
-           TYPE=FSTD_TYPE_WN
-       END IF
- 
-       IF ( FSTD_OUT_FORMAT == 0 ) THEN
-          IF (.NOT. FLFRST) THEN
-             TYPE=FSTD_TYPE_A
-          END IF
-       END IF
  
 ! Determine valid times of the output fields
  
