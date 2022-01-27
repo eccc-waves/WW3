@@ -41,7 +41,8 @@ CONTAINS
  
  SUBROUTINE FSTD_WRITE_FIELD (IUN,FIELD1,MASK1,NI,NJ,NOM1,                  &
   &                           IDATEO,ETIKET,IDEET,RHOUR,IP1,IP2,IP3,        &
-  &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR)
+  &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR, &
+  &                           TRIMIJ)
 !/
 !/                  +-----------------------------------+
 !/                  |           J. McLean               |
@@ -86,6 +87,7 @@ CONTAINS
 !       TYPVAR   CHAR      FIELD TYPE(A=Analysis,P=Prognosis,C=Climatology)
 !       NPAK     INT       NUMBER OF BITS TO KEEP (negative of)
 !       DATYP    INT       DATA TYPE
+!       TRIMIJ   INT       REMOVE ROWS FROM GRID (ISTART, JSTART, IEND, JEND)
 !
 !     ----------------------------------------------------------------
 !
@@ -146,12 +148,15 @@ CONTAINS
       REAL, DIMENSION(NI,NJ),INTENT(IN)    ::  FIELD1
       INTEGER, DIMENSION(NI,NJ),INTENT(IN) ::  MASK1
       REAL, INTENT(IN)                     ::  SCAL_PAR
+      INTEGER, INTENT(IN)                  ::  TRIMIJ(4)
  
 !     Local Variables
  
+      REAL, DIMENSION(:,:), ALLOCATABLE    :: FIELD2
+      INTEGER, DIMENSION(:,:), ALLOCATABLE :: MASK2
+      INTEGER                              :: NI2, NJ2, IS, IE, JS, JE
       INTEGER                   ::  NK, IG4, IERR, NPAS
       LOGICAL                   ::  REWRIT
-      REAL, DIMENSION(NI,NJ)    ::  FIELD1SP
  
 !...............................................................
  
@@ -161,14 +166,25 @@ CONTAINS
 !!! ;-(      REWRIT = .true.   ! To be defined in ww3_ousf.inp...hardcoded for now
       REWRIT = .false.
  
-      FIELD1SP = SCAL_PAR * FIELD1
+      NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+      NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+      IS = TRIMIJ(1) + 1
+      IE = NI - TRIMIJ(3)
+      JS = TRIMIJ(2) + 1
+      JE = NJ - TRIMIJ(4)
+
+      ALLOCATE(FIELD2(NI2,NJ2))
+      ALLOCATE(MASK2(NI2,NJ2))
+
+      FIELD2 = SCAL_PAR * FIELD1(IS:IE,JS:JE)
+      MASK2  = MASK1(IS:IE,JS:JE)
 
 ! Create a record in the standard file for the field identified by "NOM1"
-      IERR = FSTECR(FIELD1SP,FIELD1,NPAK,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK, &
+      IERR = FSTECR(FIELD2,FIELD2,NPAK,IUN,IDATEO,IDEET,NPAS,NI2,NJ2,NK, &
                     IP1,IP2,IP3,TYPVAR,NOM1,ETIKET,GRTYP,                &
                     IG1,IG2,IG3,IG4,DATYP,REWRIT)
  
-      IERR = FSTECR(MASK1,MASK1,-1,IUN,IDATEO,IDEET,NPAS,NI,NJ,NK,     &
+      IERR = FSTECR(MASK2,MASK2,-1,IUN,IDATEO,IDEET,NPAS,NI2,NJ2,NK,   &
                     IP1,IP2,IP3,'@@',NOM1,ETIKET,GRTYP,                &
                     IG1,IG2,IG3,IG4,2,REWRIT)
       RETURN
@@ -284,6 +300,7 @@ INTEGER,          INTENT(OUT) :: INITTIME(2)
 INTEGER   :: IER
 INTEGER   :: IDATEC, ITIMEC, IDATEC_END, ITIMEC_END
 INTEGER   :: NI, NJ, NK !! GRID DIMENSIONS
+INTEGER   :: TRIMIJ(4)
 INTEGER   :: I, J
 INTEGER   :: DATEV, DATEV_END
 INTEGER   :: IP1, IP2, IP3
@@ -391,8 +408,9 @@ IF (NVAR .GE. 2 .AND. (NOMVAR(1) .EQ. "UU" .OR. NOMVAR(1) .EQ. "UU2W")) THEN
                 GRTYP, IG1, IG2, IG3, IG4,                       &
                 SWA, LNG, DLTF, UBC, DATEV, EXTRA2, EXTRA3)
 
+   trimij = 0
    CALL FSTD_GET_VECTOR_ROTATION(DIRDELTA, ni, nj, grtyp, & 
-                                 ig1, ig2, ig3, ig4, iunit)
+                                 ig1, ig2, ig3, ig4, trimij, iunit)
 END IF
 
 !
@@ -578,7 +596,7 @@ END SUBROUTINE FSTD_GET_DATA
 !/ ------------------------------------------------------------------- /
 
 SUBROUTINE FSTD_GET_VECTOR_ROTATION(DIRDELTA, NI, NJ, GRTYP, & 
-                                    IG1, IG2, IG3, IG4, IUNIT)
+                                    IG1, IG2, IG3, IG4, TRIMIJ, IUNIT)
 !/
 !/                  +-----------------------------------+
 !/                  |           B. Pouliot              |
@@ -600,6 +618,7 @@ SUBROUTINE FSTD_GET_VECTOR_ROTATION(DIRDELTA, NI, NJ, GRTYP, &
 !       NI,NJ      Int.       I  Domain dimensions
 !       GRTYP      Character  I  Grid Type
 !       IG1/2/3/4  Int.       I  Positional records info
+!       TRIMIJ     Int        I  Remove rows from grid (i_start, j_start, i_end, j_end)
 !       IUNIT      Int.       I  File descriptor
 !     ----------------------------------------------------------------
 !
@@ -644,47 +663,64 @@ REAL, ALLOCATABLE, INTENT(OUT) :: DIRDELTA(:,:)
 INTEGER,           INTENT(IN)  :: IUNIT    !! FORTRAN UNIT ASSOCIATED TO FILE
 INTEGER,           INTENT(IN)  :: IG1, IG2, IG3, IG4, NI, NJ
 CHARACTER(len=1),  INTENT(IN)  :: GRTYP
+INTEGER,           INTENT(IN)  :: TRIMIJ(4)
 
 !
 ! LOCAL VARIABLES.
 !
 INTEGER           :: IER, I, J, GDIN
-REAL, ALLOCATABLE :: SPDDUMMY(:,:), UNORTH(:,:), VNORTH(:,:)
+REAL, ALLOCATABLE :: SPDDUMMY(:,:), DIRDELTATRIM(:,:)
+REAL, ALLOCATABLE :: UNORTH(:,:), VNORTH(:,:)
+INTEGER           :: NI2, NJ2, IS, IE, JS, JE
 
 !
 ! RPN FUNCTIONS AND MACROS USED
 !
 INTEGER, EXTERNAL :: EZQKDEF, EZDEFSET, EZWDINT, EZUVINT
 
-   ALLOCATE(DIRDELTA(NI,NJ))
 
-   IF(GRTYP .EQ. 'M') THEN
-     DIRDELTA = 0.0
-   ELSE
-     ALLOCATE(UNORTH(NI,NJ))
-     ALLOCATE(VNORTH(NI,NJ))
-     ALLOCATE(SPDDUMMY(NI,NJ))
+   NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+   NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+   IS = TRIMIJ(1) + 1
+   IE = NI - TRIMIJ(3)
+   JS = TRIMIJ(2) + 1
+   JE = NJ - TRIMIJ(4)
+ 
+   ALLOCATE(DIRDELTA(NI,NJ))
+   DIRDELTA = 0.0
+
+   IF(GRTYP .NE. 'M') THEN
+     ALLOCATE(UNORTH(NI2,NJ2))
+     ALLOCATE(VNORTH(NI2,NJ2))
+     ALLOCATE(SPDDUMMY(NI2,NJ2))
+     ALLOCATE(DIRDELTATRIM(NI2,NJ2))
 
 !    Define grid
-     GDIN = EZQKDEF(NI, NJ, GRTYP, IG1, IG2, IG3, IG4, IUNIT)
+     GDIN = EZQKDEF(NI2, NJ2, GRTYP, IG1, IG2, IG3, IG4, IUNIT)
 
 !    Define output grid and define grid set
      ier = EZDEFSET(GDIN, GDIN)
 
 !    Unit north wind at each grid point
-     DO J=1,NJ
-       DO I=1,NI
+     DO J=1,NJ2
+       DO I=1,NI2
          VNORTH(I,J) = -1
          UNORTH(I,J) = 0
        END DO
      END DO
 
 !    EZWDINT crashes unless EZUVINT is executed first; remove when fixed
-     ier = EZUVINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
+     ier = EZUVINT(SPDDUMMY, DIRDELTATRIM, UNORTH, VNORTH)
 
 !    Convert wind components (in grid direction)
 !    to wind speed and wind direction (meteorological)
-     ier = EZWDINT(SPDDUMMY, DIRDELTA, UNORTH, VNORTH)
+     ier = EZWDINT(SPDDUMMY, DIRDELTATRIM, UNORTH, VNORTH)
+
+     DO J=JS,JE
+       DO I=IS,IE
+         DIRDELTA(I,J) = DIRDELTATRIM(I-IS+1,J-JS+1)
+       END DO
+     END DO
    END IF
 
 END SUBROUTINE FSTD_GET_VECTOR_ROTATION
@@ -1001,7 +1037,7 @@ END SUBROUTINE FSTD_CLOSE
    SUBROUTINE FSTD_CREATE_GRID (IUN, NI, NJ, IDATEC, ITIMEC, &
                                 SWLAT, SWLON, DLAT, DLON, ETIKET, &
                                 IP1Z, IP2Z, IP3Z, NPAK, GRTYP, &
-                                IG1, IG2, IG3, IG4, DATYP, TYPVAR)
+                                IG1, IG2, IG3, IG4, DATYP, TYPVAR, TRIMIJ)
 !/
 !/               +-----------------------------------+
 !/               |           J. McLean               |
@@ -1043,6 +1079,7 @@ END SUBROUTINE FSTD_CLOSE
 !       IG4      INTEGER     IG4 value for ZE grid, 0 for auto-detect of ZL grd
 !       DATYP    INTEGER     Data type
 !       TYPVAR   CHARACTER   Typvar for LA and LO
+!       TRIMIJ   INT         REMOVE ROWS FROM GRID (ISTART, JSTART, IEND, JEND)
 !     ----------------------------------------------------------------
 !
 !     Internal parameters
@@ -1089,6 +1126,7 @@ END SUBROUTINE FSTD_CLOSE
 !/ ------------------------------------------------------------------- /
  
       USE W3GDATMD, ONLY: XGRD, YGRD, SX, SY, NTRI, TRIGP
+      USE W3SERVMD, ONLY: EXTCDE
 
       IMPLICIT NONE
  
@@ -1098,11 +1136,11 @@ END SUBROUTINE FSTD_CLOSE
       CHARACTER(len=1), INTENT(IN) :: GRTYP
       INTEGER, INTENT(IN) :: IG1, IG2, IG3, IG4
       CHARACTER(len=2), INTENT(IN)::TYPVAR
+      INTEGER, INTENT(IN)     ::  TRIMIJ(4)
 
       INTEGER                 ::  IG(4)
       REAL, DIMENSION(:), ALLOCATABLE:: XAXIS, YAXIS, ZAXIS
-      REAL, DIMENSION(:,:), ALLOCATABLE:: LA, LO
-!      REAL, DIMENSION(:), ALLOCATABLE:: XDUMMY, YDUMMY
+      REAL, DIMENSION(:,:), ALLOCATABLE:: LA, LO, LA2, LO2
       INTEGER, ALLOCATABLE :: TRIGPFLAT (:)
  
       INTEGER  IERR, i, j
@@ -1121,21 +1159,41 @@ END SUBROUTINE FSTD_CLOSE
       REAL SWLAT, SWLON, DLAT, DLON
       REAL SWLATREF, SWLONREF, DLATREF, DLONREF
       LOGICAL REWRIT
+      INTEGER NI2, NJ2, IS, IE, JS, JE
+      INTEGER NDSE
+
+      NDSE = 6
+
+      NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+      NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+      IS = TRIMIJ(1) + 1
+      IE = NI - TRIMIJ(3)
+      JS = TRIMIJ(2) + 1
+      JE = NJ - TRIMIJ(4)
  
       IF ( GRTYP .EQ. 'M' ) THEN
+        IF ( ANY(TRIMIJ .NE. 0) ) THEN
+          WRITE (NDSE,1010)
+          CALL EXTCDE ( 1 )
+        END IF
+
         GRLALO = 'Y'
         NITIC = NI
         NJTIC = 1
         NITAC = NI
         NJTAC = 1
         ALLOCATE(XAXIS(NI), YAXIS(NI))
+        ALLOCATE(LA(NI,1), LO(NI,1))
+        ALLOCATE(LA2(NI,1), LO2(NI,1))
       ELSE
         GRLALO = 'Z'
-        NITIC = NI
+        NITIC = NI2
         NJTIC = 1
         NITAC = 1
-        NJTAC = NJ
-        ALLOCATE(XAXIS(NI), YAXIS(NJ))
+        NJTAC = NJ2
+        ALLOCATE(XAXIS(NI2), YAXIS(NJ2))
+        ALLOCATE(LA(NI,NJ), LO(NI,NJ))
+        ALLOCATE(LA2(NI2,NJ2), LO2(NI2,NJ2))
       END IF
 
       NK  = 1
@@ -1144,7 +1202,6 @@ END SUBROUTINE FSTD_CLOSE
  
 !     Initialization of the necessary standard file parameters
 !     required to write a record
- 
       DEET = 0
       NPAS = 0
       TYPVARP = 'X'
@@ -1156,7 +1213,6 @@ END SUBROUTINE FSTD_CLOSE
       HHMMSSSS = ITIMEC*100
       IERR =  NEWDATE(IDATEO,YYYYMMDD,HHMMSSSS,3)
 
-      ALLOCATE(LA(NI,NJ), LO(NI,NJ))
       LA = TRANSPOSE(YGRD)
       LO = TRANSPOSE(XGRD)
 
@@ -1179,15 +1235,6 @@ END SUBROUTINE FSTD_CLOSE
           DLON = SX
           DLAT = SY
 
-!         Initialisation of the axes values
-          DO i=1,NI
-            XAXIS(i) = SWLON + DLON * (i-1)
-          END DO
- 
-          DO j=1,NJ
-            YAXIS(j) = SWLAT + DLAT * (j-1)
-          END DO
- 
 !         Computation of ig parameters for defining a z-grid in a latlon
 !         space. The values are such that the lat-lon can be encoded
 !         "as is" in the navigational records without supplemental conversion
@@ -1207,28 +1254,21 @@ END SUBROUTINE FSTD_CLOSE
           IG(3) = IG3
           IG(4) = IG4
           GRREF  = 'E'
-
-!       ALLOCATE(XDUMMY(NI), YDUMMY(NJ))
-!       CALL CIGAXG(grref,XG1,XG2,XG3,XG4,ig1,ig2,ig3,ig4)
-! xg1=xlat1, xg2=xlon1, xg3=xlat2, xg4=xlon2)
-!       CALL EZ_GFXYFLL(XAXIS, XDUMMY, xgrd(1,:), ygrd(1,:), 1, xg1, xg2, xg3, xg4)
-!       CALL EZ_GFXYFLL(YDUMMY, YAXIS, xgrd(:,1), ygrd(:,1), 1, xg1, xg2, xg3, xg4)
-
-!         Initialisation of the axes values
-          DO i=1,NI
-            XAXIS(i) = SWLON + DLON * (i-1)
-          END DO
-
-          DO j=1,NJ
-            YAXIS(j) = SWLAT + DLAT * (j-1)
-          END DO
-
         END IF
+
+!       Initialisation of the axes values
+        DO i=IS,IE
+          XAXIS(i-is+1) = SWLON + DLON * (i - 1)
+        END DO
+
+        DO j=JS,JE
+          YAXIS(j-js+1) = SWLAT + DLAT * (j - 1)
+        END DO
       END IF
 
 !     Compute unique set of ip1z ip2z from crc checksum of the grid descriptors
      seed = 0
-     call descr_signature(IP1Z,IP2Z,IP3Z,seed,xaxis,yaxis,zaxis,ni,nj,1,ig,4)
+     call descr_signature(IP1Z,IP2Z,IP3Z,seed,xaxis,yaxis,zaxis,ni2,nj2,1,ig,4)
  
 !     Write the navigational records into the standard file
 !     with full precision (IEEE 32 bits)
@@ -1262,17 +1302,23 @@ END SUBROUTINE FSTD_CLOSE
       IP2 = 0
       IP3 = 0
 
+      LA2 = LA(IS:IE,JS:JE)
+      LO2 = LO(IS:IE,JS:JE)
+
       NOMVAR = 'LA'
-      IERR=FSTECR(LA, LA, NPAK, IUN, IDATEO, DEET, NPAS, NI, NJ, NK, &
+      IERR=FSTECR(LA2, LA2, NPAK, IUN, IDATEO, DEET, NPAS, NI2, NJ2, NK, &
       &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
       &           IP2Z, IP3Z, 0, DATYP, REWRIT)
  
       NOMVAR = 'LO'
-      IERR=FSTECR(LO, LO, NPAK, IUN, IDATEO, DEET, NPAS, NI, NJ, NK, &
+      IERR=FSTECR(LO2, LO2, NPAK, IUN, IDATEO, DEET, NPAS, NI2, NJ2, NK, &
       &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
       &           IP2Z, IP3Z, 0, DATYP, REWRIT)
  
      return
+
+ 1010 FORMAT (/' *** WAVEWATCH III ERROR IN W3FSTDMD : '/              &
+               '     TRIMIJ SHOULD BE ALL 0 FOR M GRIDS'/)
  
   END SUBROUTINE FSTD_CREATE_GRID
  
