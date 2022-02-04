@@ -870,9 +870,9 @@ CONTAINS
                                        XX(IX,IY), XY(IX,IY), X1(IX,IY), X2(IX,IY))
                   END DO
                 END DO
-            NOM1 = "UDST"
-            NOM2 = "VDST"
-            EIP1 = 60268832
+            NOM1 = "UD"
+            NOM2 = "VD"
+            EIP1 = 75597472
             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
             WRITE(NDSO,'(A)') 'Wind - UU Component'
             ! Write the UU field to standard file (XX)
