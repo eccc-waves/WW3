@@ -1,0 +1,49 @@
+#!/bin/sh
+
+TR0=1
+TR1=0
+
+. r.load.dot rpn/libs/20220204
+. ssmuse-sh -x main/opt/hdf5-netcdf4/serial/static/inteloneapi-2021.3.0/01
+export WWATCH3_NETCDF=NC4
+export NETCDF_CONFIG=$(which nc-config)
+export METIS_PATH=/home/bpo001/models/WW3/local
+
+
+if [ -z "$WWATCH3_NETCDF" ]; then
+    ww3_NetCDF=
+else
+    ww3_NetCDF="ww3_ounf ww3_ounp ww3_bounc"
+fi
+
+ww3_mpi="ww3_shel ww3_multi"
+ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
+
+if [[ $TR0 -eq 1 ]]; then
+  # TR0 SEQ
+  cp switch_CMC_1 switch
+  ./w3_automake $ww3_seq
+
+  # TR0 MPI with MLIM
+  sed 's/SHRD/DIST MPI/g' switch_CMC_1 > switch
+  ./w3_automake $ww3_mpi
+
+  for f in $ww3_mpi; do
+    mv ../exe/$f ../exe/${f}_mlim
+  done
+
+  # TR0 MPI without MLIM
+  sed 's/SHRD/DIST MPI/g;s/MLIM//g' switch_CMC_1 > switch
+  ./w3_automake $ww3_mpi
+fi
+
+if [[ $TR1 -eq 1 ]]; then
+  # TR1 SEQ
+  cp switch_CMC_2 switch
+  ./w3_automake $ww3_seq
+
+  # TR1 MPI with PDLIB
+  sed 's/SHRD/DIST MPI/g' switch_CMC_2_pdlib > switch
+  ./w3_automake $ww3_mpi
+fi
+
