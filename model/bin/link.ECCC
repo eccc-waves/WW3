@@ -84,6 +84,7 @@
 # 3.a Build options and determine compiler name
 
   comp=s.f90
+  ldflags="-static_mpi -static-intel -static-libgcc -static-libstdc++ -nostrip"
   libs=""
   #opt="-O3 -ip -o $prog"
   opt="-O3 -o $prog"
@@ -91,7 +92,7 @@
   # mpi implementation
   if [ "$mpi_mod" = 'yes' ]
   then
-    opt="$opt -mpi"
+    opt="$opt -mpi $ldflags"
   fi
 
   # open mpi implementation
