@@ -24,6 +24,7 @@ else
 fi
 
 ww3_mpi="ww3_shel ww3_multi"
+ww3_mpi_pdlib="ww3_shel"
 ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
 
 if [[ $TR0 -eq 1 ]]; then
@@ -32,7 +33,7 @@ if [[ $TR0 -eq 1 ]]; then
   if [[ $SEQ -eq 1 ]]; then
     # TR0 SEQ
     cp switch_CMC_1 switch
-    ./w3_make $ww3_mpi
+    ./w3_make $ww3_seq
     cp ../exe/ww3_* ../exe_tr0/
   fi
 
@@ -57,14 +58,14 @@ if [[ $TR1 -eq 1 ]]; then
   if [[ $SEQ -eq 1 ]]; then
     # TR1 SEQ
     cp switch_CMC_2 switch
-    ./w3_make $ww3_mpi
+    ./w3_make $ww3_seq
     cp ../exe/ww3_* ../exe_tr1/
   fi
 
   if [[ $MPI -eq 1 ]]; then
     # TR1 MPI with PDLIB
     sed 's/SHRD/DIST MPI/g' switch_CMC_2_pdlib > switch
-    ./w3_make $ww3_mpi
+    ./w3_make $ww3_mpi_pdlib
     cp ../exe/ww3_* ../exe_tr1/
   fi
 fi
