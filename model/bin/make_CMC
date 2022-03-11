@@ -5,6 +5,11 @@ TR1=1 # Build with TR1 switch (RDWPS NEP)
 SEQ=1 # Build utility programs (sequential)
 MPI=1 # Build model (mpi)
 
+ww3_mpi="ww3_shel ww3_multi"
+ww3_mpi_no_mlim="ww3_shel"
+ww3_mpi_pdlib="ww3_shel"
+ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
+
 # Load intel compiler and code-tools (if not already done)
 #. r.load.dot eccc/mrd/rpn/code-tools/ENV/cdt-1.5.5-inteloneapi-2022.1.2
 # Load rmn lib
@@ -23,15 +28,10 @@ else
     ww3_NetCDF="ww3_ounf ww3_ounp ww3_bounc"
 fi
 
-ww3_mpi="ww3_shel ww3_multi"
-ww3_mpi_no_mlim="ww3_shel"
-ww3_mpi_pdlib="ww3_shel"
-ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
-
 if [[ $TR0 -eq 1 ]]; then
-  mkdir ../exe_tr0
+  mkdir -p ../exe_tr0
 
-  if [[ $SEQ -eq 1 ]]; then
+  if [[ $SEQ -eq 1 && -n "$ww3_seq" ]]; then
     # TR0 SEQ
     cp switch_CMC_1 switch
     ./w3_make $ww3_seq
@@ -40,14 +40,16 @@ if [[ $TR0 -eq 1 ]]; then
     done
   fi
 
-  if [[ $MPI -eq 1 ]]; then
+  if [[ $MPI -eq 1 && -n "$ww3_mpi" ]]; then
     # TR0 MPI with MLIM
     sed 's/SHRD/DIST MPI/g' switch_CMC_1 > switch
     ./w3_make $ww3_mpi
     for f in $ww3_mpi; do
       cp ../exe/$f ../exe_tr0/
     done
+  fi
 
+  if [[ $MPI -eq 1 && -n "$ww3_mpi_no_mlim" ]]; then
     # TR0 MPI without MLIM
     sed 's/SHRD/DIST MPI/g;s/MLIM//g' switch_CMC_1 > switch
     ./w3_make $ww3_mpi_no_mlim
@@ -58,9 +60,9 @@ if [[ $TR0 -eq 1 ]]; then
 fi
 
 if [[ $TR1 -eq 1 ]]; then
-  mkdir ../exe_tr1
+  mkdir -p ../exe_tr1
 
-  if [[ $SEQ -eq 1 ]]; then
+  if [[ $SEQ -eq 1 && -n "$ww3_seq" ]]; then
     # TR1 SEQ
     cp switch_CMC_2 switch
     ./w3_make $ww3_seq
@@ -69,7 +71,7 @@ if [[ $TR1 -eq 1 ]]; then
     done
   fi
 
-  if [[ $MPI -eq 1 ]]; then
+  if [[ $MPI -eq 1 && -n "$ww3_mpi_pdlib" ]]; then
     # TR1 MPI with PDLIB
     sed 's/SHRD/DIST MPI/g' switch_CMC_2_pdlib > switch
     ./w3_make $ww3_mpi_pdlib
