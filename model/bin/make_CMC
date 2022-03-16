@@ -1,15 +1,5 @@
 #!/bin/sh
 
-TR0=1 # Build with TR0 switch
-TR1=1 # Build with TR1 switch (RDWPS NEP)
-SEQ=1 # Build utility programs (sequential)
-MPI=1 # Build model (mpi)
-
-ww3_mpi="ww3_shel ww3_multi"
-ww3_mpi_no_mlim="ww3_shel"
-ww3_mpi_pdlib="ww3_shel"
-ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
-
 # Load intel compiler and code-tools (if not already done)
 #. r.load.dot eccc/mrd/rpn/code-tools/ENV/cdt-1.5.5-inteloneapi-2022.1.2
 # Load rmn lib
@@ -17,16 +7,30 @@ ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_up
 # Load NetCDF
 . ssmuse-sh -x main/opt/hdf5-netcdf4/serial/static/inteloneapi-2022.1.2/01
 
-export WWATCH3_NETCDF=NC4
-export NETCDF_CONFIG=$(which nc-config)
 # Graph partitionning for unstructured grid
 export METIS_PATH=/home/bpo001/models/WW3/local
 
-if [ -z "$WWATCH3_NETCDF" ]; then
-    ww3_NetCDF=
-else
-    ww3_NetCDF="ww3_ounf ww3_ounp ww3_bounc"
+# NetCDF
+export WWATCH3_NETCDF=NC4
+export NETCDF_CONFIG=$(which nc-config)
+
+# Config what to build
+TR0=1 # Build with TR0 switch
+TR1=1 # Build with TR1 switch (RDWPS NEP)
+SEQ=1 # Build utility programs (sequential)
+MPI=1 # Build model (mpi)
+
+if [ -n "$WWATCH3_NETCDF" ]; then
+  ww3_NetCDF="ww3_ounf ww3_ounp ww3_bounc"
 fi
+
+ww3_mpi="ww3_shel ww3_multi"
+ww3_mpi_no_mlim="ww3_shel"
+ww3_mpi_pdlib="ww3_shel"
+ww3_seq="ww3_grid ww3_strt ww3_outp ww3_ousf ww3_prsf ww3_bounm ww3_rstrt ww3_uprstr ww3_gint $ww3_NetCDF"
+
+
+# Build
 
 if [[ $TR0 -eq 1 ]]; then
   mkdir -p ../exe_tr0
