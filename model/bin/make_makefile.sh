@@ -117,6 +117,7 @@
          ww3_outf ww3_outp ww3_trck ww3_trnc ww3_grib gx_outf gx_outp ww3_ounf
          ww3_ounp ww3_gspl ww3_gint ww3_bound ww3_bounc ww3_systrk $tideprog"
   progs="$progs ww3_multi_esmf  ww3_uprstr"
+  progs="$progs ww3_ousf ww3_prsf ww3_bounm ww3_rstrt"
   progs="$progs libww3"
   progs="$progs libww3.so"
 
@@ -154,6 +155,10 @@
       libww3) IDstring='Object file archive' ;;
       libww3.so) IDstring='Object file archive' ;;
       ww3_uprstr) IDstring='Update Restart File' ;;
+      ww3_outf) IDstring='Gridded RPN Std output' ;;
+      ww3_prsf) IDstring='RPN Std field preprocessor' ;;
+      ww3_bounm) IDstring='Boundary conditions merge' ;;
+      ww3_rstrt) IDstring='Update Restart File Time' ;;
     esac
 
 
@@ -436,6 +441,7 @@
          'W3OUNFMETAMD' ) modtest=w3ounfmetamd.o ;;
          'W3METAMD'     ) modtest=w3metamd.o ;;
          'W3GRIDMD'     ) modtest=w3gridmd.o ;;
+         'W3FSTDMD'     ) modtest=w3fstdmd.o ;;
          *              ) modfound=no ;;
       esac
 

@@ -985,6 +985,35 @@ create_file_list()
                 IO='w3iogrmd w3iogomd w3iorsmd' 
                aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd" 
                aux="$aux w3parall w3nmluprstrmd" ;; 
+      ww3_bounm)
+               core=
+               data='w3gdatmd w3odatmd'
+               prop=
+            sourcet=
+                 IO='w3gsrumd'
+                aux='constants w3servmd w3timemd' ;;
+      ww3_rstrt)
+              core=
+              data='wmmdatmd w3triamd w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+              prop=
+           sourcet="$memcode $pdlibcode $pdlibyow $flx $ln $st $nl $bt $ic $is $db $tr $bs $xx $uostmd"
+                IO='w3iogrmd w3iogomd w3iorsmd'
+               aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd"
+               aux="$aux w3parall" ;;
+      ww3_prsf)
+               core="w3fstdmd w3fldsmd"
+               data='w3gdatmd w3adatmd w3idatmd w3odatmd w3wdatmd'
+               prop=
+            sourcet="w3triamd $stx $nlx $btx"
+                 IO='w3iogrmd'
+                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3gsrumd w3parall" ;;
+      ww3_ousf)
+               core="w3fstdmd"
+               data='w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd'
+               prop=
+            sourcet="$stx $nlx $btx"
+                 IO='w3iogrmd w3iogomd'
+                aux='constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd w3parall' ;;
     esac
 
     # if esmf is included in program name or if 

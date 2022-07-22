@@ -1,0 +1,1369 @@
+module w3fstdmd
+ 
+   USE CONSTANTS
+ 
+   USE W3ODATMD, ONLY: NDSE, NDSO, UNDEF
+ 
+    implicit none
+ 
+! Public Sub-routines
+!INTERFACE FSTD_GET_DATA
+!    MODULE PROCEDURE FSTD_GET_DATA
+!END INTERFACE
+ 
+!INTERFACE FSTD_CREATE_GRID
+!    MODULE PROCEDURE FSTD_CREATE_GRID
+!    INTEGER GDIN
+!END INTERFACE
+ 
+!INTERFACE FSTD_WRITE_FIELD
+!    MODULE PROCEDURE FSTD_WRITE_FIELD
+!END INTERFACE
+ 
+!INTERFACE FSTD_GET_VECTOR_ROTATION
+!    MODULE PROCEDURE FSTD_GET_VECTOR_ROTATION
+!END INTERFACE
+
+!INTERFACE ROTATE_VECTOR
+!    MODULE PROCEDURE ROTATE_VECTOR
+!END INTERFACE
+
+! Private Sub-routines
+!INTERFACE FSTD_OPEN
+!    MODULE PROCEDURE FSTD_OPEN
+!END INTERFACE
+ 
+!INTERFACE FSTD_CLOSE
+!    MODULE PROCEDURE FSTD_CLOSE
+!END INTERFACE
+ 
+CONTAINS
+ 
+ SUBROUTINE FSTD_WRITE_FIELD (IUN,FIELD1,MASK1,NI,NJ,NOM1,                  &
+  &                           IDATEO,ETIKET,IDEET,RHOUR,IP1,IP2,IP3,        &
+  &                           SCAL_PAR,GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR, &
+  &                           TRIMIJ)
+!/
+!/                  +-----------------------------------+
+!/                  |           J. McLean               |
+!/                  |           M. Lepine               |
+!/                  |                        FORTRAN 90 |
+!/                  | Last Update :            Jan-2015 |
+!/                  +-----------------------------------+
+!/
+!/   14-May-2012 : Creation                            ( version 4.04_EC )
+!
+!  1. Purpose :
+!     To create CMC-RPN Standard File format (FSTD) of mean wave parameters from
+!     WaveWatch3 gridded output (out_grd.ww3).
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       NX/Y    Int.  I  Grid dimensions.
+!       NSEA    Int.  I  Number of sea points.
+!       FLFRST  Log.  I  Flag for first pass through routine
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!       FLONE   Log.  Flags for one or two-dimensional field.
+!       X1, X2, XX, XY
+!               R.A.  Output fields
+!
+!       FIELD1   REAL      FIELD ARRAY TO OUTPUT.
+!       MASK1    INTEGER   MASK ARRAY TO OUTPUT.
+!       NI       INTEGER   FIRST DIMENSION  OF ARRAY.
+!       NJ       INTEGER   SECOND DIMENSION OF ARRAY.
+!       NOM1     CHAR      VARIABLE NAME.
+!       IDATEO   INTEGER   DATE OF ORIGIN.
+!       ETIKET   CHAR      LABEL.
+!       IDEET    INTEGER   PROPAGATION TIME STEP
+!       IP2      INTEGER   FORECAST HOUR
+!       IP3      INTEGER   FIELD UNITS
+!       RHOUR    REAL      REAL FORECAST HOUR (CAN NOW BE A FRACTION OF AN HOUR)
+!       SCAL_PAR REAL      MULTIPLICATION FACTOR
+!       TYPVAR   CHAR      FIELD TYPE(A=Analysis,P=Prognosis,C=Climatology)
+!       NPAK     INT       NUMBER OF BITS TO KEEP (negative of)
+!       DATYP    INT       DATA TYPE
+!       TRIMIJ   INT       REMOVE ROWS FROM GRID (ISTART, JSTART, IEND, JEND)
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      FSTECR    Subr.   E       CMC-RPN library routine
+!!      FSTOUV    Subr.   E       CMC-RPN library routine
+!!      FCLOS     Subr.   E       CMC-RPN library routine
+!!      FSTFRM    Subr.   E       CMC-RPN library routine
+!!      FNOM      Subr.   E       CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Main program in which it is contained.
+!
+!  6. Error messages :
+!
+!       None.
+!
+!  7. Remarks :
+!
+!     Based on work used to create Standard Files from EC's WAM output.
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+ 
+      IMPLICIT NONE
+ 
+      INTEGER, EXTERNAL                  ::  FSTECR
+ 
+      CHARACTER(len=4), INTENT(IN)       ::  NOM1
+      CHARACTER(len=12), INTENT(IN)      ::  ETIKET
+      CHARACTER(len=1), INTENT(IN)       ::  GRTYP
+      CHARACTER(len=2), INTENT(IN)       ::  TYPVAR
+ 
+      INTEGER                            ::  IUN
+      INTEGER, INTENT(IN)                ::  NI,NJ
+      INTEGER, INTENT(IN)                ::  IDATEO(2)
+      INTEGER, INTENT(IN)                ::  IDEET
+      INTEGER, INTENT(IN)                ::  IP1,IP2,IP3
+      REAL,    INTENT(IN)                ::  RHOUR
+      INTEGER, INTENT(IN)                ::  IG1,IG2,IG3
+      INTEGER, INTENT(IN)                ::  NPAK, DATYP
+ 
+      REAL, DIMENSION(NI,NJ),INTENT(IN)    ::  FIELD1
+      INTEGER, DIMENSION(NI,NJ),INTENT(IN) ::  MASK1
+      REAL, INTENT(IN)                     ::  SCAL_PAR
+      INTEGER, INTENT(IN)                  ::  TRIMIJ(4)
+ 
+!     Local Variables
+ 
+      REAL, DIMENSION(:,:), ALLOCATABLE    :: FIELD2
+      INTEGER, DIMENSION(:,:), ALLOCATABLE :: MASK2
+      INTEGER                              :: NI2, NJ2, IS, IE, JS, JE
+      INTEGER                   ::  NK, IG4, IERR, NPAS
+      LOGICAL                   ::  REWRIT
+ 
+!...............................................................
+ 
+      IG4    = 0
+      NK     = 1
+      NPAS   = (RHOUR * 3600) / IDEET
+!!! ;-(      REWRIT = .true.   ! To be defined in ww3_ousf.inp...hardcoded for now
+      REWRIT = .false.
+ 
+      NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+      NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+      IS = TRIMIJ(1) + 1
+      IE = NI - TRIMIJ(3)
+      JS = TRIMIJ(2) + 1
+      JE = NJ - TRIMIJ(4)
+
+      ALLOCATE(FIELD2(NI2,NJ2))
+      ALLOCATE(MASK2(NI2,NJ2))
+
+      FIELD2 = SCAL_PAR * FIELD1(IS:IE,JS:JE)
+      MASK2  = MASK1(IS:IE,JS:JE)
+
+! Create a record in the standard file for the field identified by "NOM1"
+      IERR = FSTECR(FIELD2,FIELD2,NPAK,IUN,IDATEO,IDEET,NPAS,NI2,NJ2,NK, &
+                    IP1,IP2,IP3,TYPVAR,NOM1,ETIKET,GRTYP,                &
+                    IG1,IG2,IG3,IG4,DATYP,REWRIT)
+ 
+      IERR = FSTECR(MASK2,MASK2,-1,IUN,IDATEO,IDEET,NPAS,NI2,NJ2,NK,   &
+                    IP1,IP2,IP3,'@@',NOM1,ETIKET,GRTYP,                &
+                    IG1,IG2,IG3,IG4,2,REWRIT)
+      RETURN
+ 
+END SUBROUTINE FSTD_WRITE_FIELD
+ 
+ 
+ 
+SUBROUTINE FSTD_GET_DATA (FILENAME, IUNIT, FSTD_TYPE, TYPVAR, IDATEV, IDATEV_END, LEVELS, &
+                          UNITS, NOMVAR, DATARR, IOS, NRECORDS, TIME_STEP , INITTIME )
+!/
+!/                  +-----------------------------------+
+!/                  |           J. McLean               |
+!/                  |           M. Lepine               |
+!/                  |                        FORTRAN 90 |
+!/                  | Last update :            Jul-2016 |
+!/                  +-----------------------------------+
+!/
+!/   14-May-2012 : Creation                            ( version 4.04_EC )
+!/   ??-Sep-2014 : ?                                   ( version 4.??_EC )
+!/   13-Jul-2016 : Adding wind vector rotation         ( version 4.??_EC )
+!
+!  1. Purpose :
+!     To read fields from files with a CMC-RPN Standard File format.
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       FILENAME   Character  I    Standard file name
+!       IUNIT      Int.       I    File descriptor
+!       TYPVAR     Character  I    Standard file field type
+!       FSTD_TYPE  Character  I    Standard file type
+!       IDATEV     Character  I    Runtime DATE (initial time)
+!       IDATEV_END Character  I    Runtime DATE (final time)
+!       LEVELS     Int.       I    Vertical Levels of Field
+!       UNITS      Character  I    Units of input field
+!       NOMVAR     Character  I    Field descriptor
+!       DATARR     Real       O/A  Data array of field
+!       IOS        Int.       O    Error code
+!       NRECORDS   Int.       O    Number of records read
+!       TIME_STEP  Int.       O/A  Time step between records (in hours)
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      ZLATLON   Subr.   I       Subroutine tracing.
+!      FSTECR    Subr.   E       CMC-RPN library routine
+!      FSTOUV    Subr.   E       CMC-RPN library routine
+!      FCLOS     Subr.   E       CMC-RPN library routine
+!      FSTFRM    Subr.   E       CMC-RPN library routine
+!      FSTLIR    Subr.   E       CMC-RPN library routine
+!      FNOM      Subr.   E       CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Main program
+!
+!  6. Error messages :
+!
+!       None
+!
+!  7. Remarks :
+!
+!     Based on work used to create Standard Files from EC's WAM output.
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+!/
+!/ Specify default accessibility
+!/
+!      PUBLIC
+ 
+ 
+!
+! INTERFACE VARIABLES
+!
+CHARACTER(len=80), INTENT(IN)  :: FILENAME   !! STANDARD FILENAME
+CHARACTER(len=*), INTENT(IN)  :: FSTD_TYPE  !! FSTD FILE TYPE
+CHARACTER(len=2), INTENT(IN)  :: TYPVAR     !! FSTD FIELD TYPE
+INTEGER,          INTENT(IN)  :: IUNIT      !! FORTRAN UNIT ASSOCIATED TO FILE
+CHARACTER(len=14),INTENT(IN)  :: IDATEV     !! VALID DATE (YYYYMMDDHHMMSS)
+CHARACTER(len=14),INTENT(IN)  :: IDATEV_END !! VALID DATE (YYYYMMDDHHMMSS)
+INTEGER,          INTENT(IN)  :: LEVELS(:)  !! LEVELS OF DATA TO READ
+CHARACTER(len=80),INTENT(IN)  :: UNITS      !! UNITS OF INPUT FIELD
+CHARACTER(len=4), INTENT(IN)  :: NOMVAR(:)  !! NAME OF FIELD OF DATA
+REAL, DIMENSION(:,:,:,:), POINTER :: DATARR   !! ARRAY OF DATA READ FOR ALL FCST HOURS
+INTEGER,          INTENT(OUT) :: NRECORDS
+REAL, DIMENSION(:), POINTER   :: TIME_STEP
+INTEGER,          INTENT(OUT) :: IOS        !! ERROR CODE (0=SUCCESS, -1=ERROR)
+INTEGER,          INTENT(OUT) :: INITTIME(2)
+!
+! LOCAL VARIABLES.
+!
+INTEGER   :: IER
+INTEGER   :: IDATEC, ITIMEC, IDATEC_END, ITIMEC_END
+INTEGER   :: NI, NJ, NK !! GRID DIMENSIONS
+INTEGER   :: TRIMIJ(4)
+INTEGER   :: I, J
+INTEGER   :: DATEV, DATEV_END
+INTEGER   :: IP1, IP2, IP3
+CHARACTER :: ETIKET*12, GRTYP*1
+INTEGER   :: FCST_NR !! Counter on number of processed records from the standard file
+INTEGER   :: VAR_NR !! Counter on number of field to process from the standard file
+REAL*8    :: DIFF_HRS !!
+REAL      :: R4_DIFF_HRS
+REAL,ALLOCATABLE   :: FLDARR(:,:)
+REAL,ALLOCATABLE   :: DIRDELTA(:,:)
+INTEGER, PARAMETER :: Listmax=5000
+INTEGER, ALLOCATABLE :: LIST(:,:)
+INTEGER    :: NLIST, PREVIOUS_DATEV, NSTEPS, NVAR
+INTEGER    :: IG1, IG2, IG3, IG4,SWA, LNG, DLTF, UBC, EXTRA2, EXTRA3
+INTEGER    :: NBITS, DATYP, DATEO, DEET, NPAS
+INTEGER    :: GDIN, KEY
+REAL       :: SPD, DIRMET
+REAL, PARAMETER         :: KTS2MPS = 0.5144444 !knots to m/s
+
+!
+! RPN FUNCTIONS AND MACROS USED
+!
+INTEGER, EXTERNAL :: FSTFRM, FSTLUK
+INTEGER, EXTERNAL :: FCLOS,  NEWDATE, DIFDATR, FSTINL, FSTPRM, FSTINF
+INTEGER, EXTERNAL :: EZQKDEF, EZDEFSET, EZWDINT, EZUVINT
+INTEGER, EXTERNAL :: f_filtre_desire, f_select_date, f_select_ip1
+ 
+IOS = -1
+ 
+!
+! OPEN STANDARD FILE
+!
+CALL FSTD_OPEN(FILENAME, IUNIT, FSTD_TYPE, IOS)
+ 
+!
+!  1. CONVERT VALID DATE TO CMC FORMAT
+!
+READ(IDATEV, '(I8,I6)') IDATEC, ITIMEC
+READ(IDATEV_END, '(I8,I6)') IDATEC_END, ITIMEC_END
+ 
+IF( IDATEC .NE. 0 ) THEN
+   ITIMEC = ITIMEC*100
+   IER = NEWDATE(DATEV, IDATEC, ITIMEC, 3)
+   IF( IER.NE.0 ) THEN
+      WRITE (NDSE,*) ' ****************************************************'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' *  FATAL ERROR IN SUB. FSTD_GET_DATA               *'
+      WRITE (NDSE,*) ' *  =================================               *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' * CONVERSION ERROR OF THE VALID DATE TO CMC FORMAT *'
+      WRITE (NDSE,*) ' *     IDATEV  =  ', IDATEV
+      WRITE (NDSE,*) ' *     IDATEC  =  ', IDATEC
+      WRITE (NDSE,*) ' *     ITIMEC  =  ', ITIMEC
+      WRITE (NDSE,*) ' *     IER     =  ', IER
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' ****************************************************'
+      CALL FSTD_CLOSE (IUNIT)
+      IOS = -1
+      RETURN
+   END IF
+ELSE
+  DATEV=-1
+END IF
+ 
+IF( IDATEC_END .NE. 0 ) THEN
+   ITIMEC_END = ITIMEC_END*100
+   IER = NEWDATE(DATEV_END, IDATEC_END, ITIMEC_END, 3)
+   IF( IER.NE.0 ) THEN
+      WRITE (NDSE,*) ' ****************************************************'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' *  FATAL ERROR IN SUB. FSTD_GET_DATA               *'
+      WRITE (NDSE,*) ' *  =================================               *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' * CONVERSION ERROR OF THE VALID DATE TO CMC FORMAT *'
+      WRITE (NDSE,*) ' *     IDATEV_END  =  ', IDATEV_END
+      WRITE (NDSE,*) ' *     IDATEC_END  =  ', IDATEC_END
+      WRITE (NDSE,*) ' *     ITIMEC_END  =  ', ITIMEC_END
+      WRITE (NDSE,*) ' *     IER     =  ', IER
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' ****************************************************'
+      CALL FSTD_CLOSE (IUNIT)
+      IOS = -1
+      RETURN
+   END IF
+ELSE
+  DATEV=-1
+END IF
+ 
+
+ETIKET = ' '
+!TYPVAR = ' '
+!GRTYP  = ' '
+IP1 = -1
+IP2 = -1
+IP3 = -1
+
+NVAR = SIZE(NOMVAR)
+
+! Get grid definition before call to select_date which interferes with getting <<, ^^
+IF (NVAR .GE. 2 .AND. (NOMVAR(1) .EQ. "UU" .OR. NOMVAR(1) .EQ. "UU2W")) THEN
+   KEY = fstinf(iunit,NI,NJ,NK,-1,' ',-1,-1,-1,typvar,nomvar(1))
+
+   ier = FSTPRM(key,DATEO,DEET, NPAS, NI, NJ, NK, NBITS,         &
+                DATYP, IP1, IP2, IP3, TYPVAR, NOMVAR(1), ETIKET, &
+                GRTYP, IG1, IG2, IG3, IG4,                       &
+                SWA, LNG, DLTF, UBC, DATEV, EXTRA2, EXTRA3)
+
+   trimij = 0
+   CALL FSTD_GET_VECTOR_ROTATION(DIRDELTA, ni, nj, grtyp, & 
+                                 ig1, ig2, ig3, ig4, trimij, iunit)
+END IF
+
+!
+! SET SELECTION CRITERIA FOR A RANGE OF DATEstamp
+!
+ier=f_filtre_desire()
+if (ier .ne. 0) print *,'Problem encountered with f_filtre_desire ier=',ier
+ier = f_select_date( (/DATEV, -2, DATEV_END /),3)
+if (ier .ne. 0) print *,'Problem encountered with f_select_date ier=',ier
+ier = f_select_ip1( LEVELS, SIZE(LEVELS))
+if (ier .ne. 0) print *,'Problem encountered with f_select_ip1 ier=',ier
+
+!
+!  2. READ THE GRID DIMENSIONS
+!
+ALLOCATE ( LIST(Listmax,NVAR) )
+DO VAR_NR=1,NVAR
+   ier = fstinl(iunit,NI,NJ,NK,-1,' ',ip1,-1,-1,typvar,NOMVAR(VAR_NR),LIST(:,VAR_NR),NLIST,Listmax)
+   IF( (ier .lt. 0) .or. (NLIST .EQ. 0) ) THEN
+       WRITE (NDSE,*) ' ****************************************************'
+       WRITE (NDSE,*) ' *                                                  *'
+       WRITE (NDSE,*) ' *    FATAL ERROR IN SUB. FSTD_GET_DATA_FIELD       *'
+       WRITE (NDSE,*) ' *       =================================          *'
+       WRITE (NDSE,*) ' *                                                  *'
+       WRITE (NDSE,*) ' * CANNOT READ THE RECORD THAT MATCHES THE SEARCH   *'
+       WRITE (NDSE,*) ' * KEYS                                             *'
+       WRITE (NDSE,*) ' *     DATEV   =  ', DATEV
+       WRITE (NDSE,*) ' *     NOMVAR  =  ', NOMVAR(VAR_NR)
+       WRITE (NDSE,*) ' *     IP1     =  ', IP1
+       WRITE (NDSE,*) ' *     IP2     =  ', IP2
+       WRITE (NDSE,*) ' *     IP3     =  ', IP3
+       WRITE (NDSE,*) ' *     ETIKET  =  ', ETIKET
+       WRITE (NDSE,*) ' *     TYPVAR  =  ', TYPVAR
+       WRITE (NDSE,*) ' *                                                  *'
+       WRITE (NDSE,*) ' ****************************************************'
+       CALL FSTD_CLOSE (IUNIT)
+       IOS = -1
+       RETURN
+   END IF
+END DO
+WRITE (NDSO,*) '                     NI     =  ', NI
+WRITE (NDSO,*) '                     NJ     =  ', NJ
+WRITE (NDSO,*) '                     NK     =  ', NK
+
+!
+! ALLOCATE THE SPACE FOR THE DATA
+!
+! DETERMINE THE NUMBER OF RECORDS REQUIRED
+IER=DIFDATR(DATEV_END,DATEV,DIFF_HRS)
+ 
+WRITE(NDSO,1000)
+WRITE(NDSO,1050) DATEV
+WRITE(NDSO,1100) DATEV_END
+WRITE(NDSO,1150) DIFF_HRS
+ 
+WRITE(NDSO,1250) NLIST
+
+ALLOCATE(FLDARR(NI,NJ))
+
+IF (.NOT. ASSOCIATED(DATARR)) THEN
+  ALLOCATE(DATARR(NI,NJ,NLIST,NVAR),STAT=ier)
+  IF( IER.NE.0 ) THEN
+      WRITE (NDSE,*) ' ****************************************************'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' *  FATAL ERROR IN SUB. FSTD_GET_DATA               *'
+      WRITE (NDSE,*) ' *  =================================               *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' * NOT ENOUGH MEMORY TO ALLOCATE DATARR             *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' ****************************************************'
+      CALL FSTD_CLOSE (IUNIT)
+      IOS = -1
+      RETURN
+   END IF
+ENDIF
+IF (.NOT. ASSOCIATED(TIME_STEP)) THEN
+  ALLOCATE(TIME_STEP(MAX(1,NLIST-1)),STAT=ier)
+  IF( IER.NE.0 ) THEN
+      WRITE (NDSE,*) ' ****************************************************'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' *  FATAL ERROR IN SUB. FSTD_GET_DATA               *'
+      WRITE (NDSE,*) ' *  =================================               *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' * NOT ENOUGH MEMORY TO ALLOCATE TIME_STEP          *'
+      WRITE (NDSE,*) ' *                                                  *'
+      WRITE (NDSE,*) ' ****************************************************'
+      CALL FSTD_CLOSE (IUNIT)
+      IOS = -1
+      RETURN
+  END IF
+ENDIF
+
+PREVIOUS_DATEV = -999
+NSTEPS = 0
+ 
+!
+!  2. READ THE RECORD THAT MATCHES THE SEARCH KEYS
+!
+DO FCST_NR=1,NLIST 
+
+   DO VAR_NR=1,NVAR
+      IER = FSTLUK(FLDARR, LIST(FCST_NR,VAR_NR), NI, NJ, NK)
+
+      IF (UNITS .EQ. "KTS") THEN
+         DATARR(:,:,FCST_NR,VAR_NR)=FLDARR(:,:)*KTS2MPS
+      ELSE
+         DATARR(:,:,FCST_NR,VAR_NR)=FLDARR(:,:)
+      END IF
+   END DO
+
+   IF (NVAR .GE. 2 .AND. (NOMVAR(1) .EQ. "UU" .OR. NOMVAR(1) .EQ. "UU2W")) THEN
+     DO J=1,NJ
+       DO I=1,NI
+         CALL ROTATE_VECTOR(DIRDELTA(I,J), 0.0, &
+                            DATARR(I,J,FCST_NR,1), DATARR(I,J,FCST_NR,2), &
+                            DATARR(I,J,FCST_NR,1), DATARR(I,J,FCST_NR,2), &
+                            SPD, DIRMET)
+       END DO
+     END DO
+   END IF
+
+   ier = FSTPRM(LIST(FCST_NR,1),DATEO,DEET, NPAS, NI, NJ, NK, NBITS, &
+                DATYP, IP1, IP2, IP3, TYPVAR, NOMVAR(1), ETIKET,     &
+                GRTYP, IG1, IG2, IG3, IG4,                           &
+                SWA, LNG, DLTF, UBC, DATEV, EXTRA2, EXTRA3)
+
+   IF (PREVIOUS_DATEV .NE. -999) THEN
+     NSTEPS = NSTEPS+1
+     IER=DIFDATR(DATEV,PREVIOUS_DATEV,DIFF_HRS)
+     R4_DIFF_HRS = DIFF_HRS
+     TIME_STEP(NSTEPS) = R4_DIFF_HRS
+     write(ndso,*) 'Debug+ TIME_STEP(',nsteps,')=',TIME_STEP(NSTEPS)
+   ELSE
+     IER = NEWDATE(DATEV, INITTIME(1), INITTIME(2), -3)
+     INITTIME(2) = INITTIME(2)/100
+     write(ndso,*) 'Debug+ INITTIME: ',INITTIME(1),INITTIME(2)
+   ENDIF
+   PREVIOUS_DATEV = DATEV
+
+   WRITE (NDSO,*) 'FSTD_GET_DATA_FIELD(INPUT_DATA)  DATEV   =  ', DATEV
+   WRITE (NDSO,*) '                                 ITIMEC  =  ', ITIMEC
+   WRITE (NDSO,*) '                                 ITIMEC_END =  ', ITIMEC_END
+   WRITE (NDSO,*) '                                 FCST_NR =  ', FCST_NR
+   WRITE (NDSO,*) '                                 IUN     =  ', IUNIT
+   DO VAR_NR=1,NVAR
+      WRITE (NDSO,*) '                                 NOMVAR  =  ', NOMVAR(VAR_NR)
+   END DO
+   WRITE (NDSO,*) '                                 TYPVAR  =  ', TYPVAR
+   WRITE (NDSO,*) '                                 ETIKET  =  ', ETIKET
+   WRITE (NDSO,*) '                                 IP1     =  ', IP1
+   WRITE (NDSO,*) '                                 IP2     =  ', IP2
+   WRITE (NDSO,*) '                                 IP3     =  ', IP3
+END DO ! LOOP OVER FORECAST HOURS
+
+!print *,'debug nombre d,heures traitees=',NLIST
+NRECORDS = NLIST
+IOS= 0
+ 
+!
+! FORMAT SETTINGS FOR OUTPUT STATEMENTS
+!
+ 
+1000 FORMAT (/'  Output Grid Prognostic Details: '/                   &
+               ' --------------------------------------------------')
+1050 FORMAT ('       Forecast Valid Start Time: ',I14)
+1100 FORMAT ('       Forecast Valid End Time: ',I14)
+1150 FORMAT ('       Forecast Length: ', F15.6)
+!1050 FORMAT ('       Forecast Valid Start Time: ',A14)
+!1100 FORMAT ('       Forecast Valid End Time: ',A14)
+!1150 FORMAT ('       Forecast Length: ', F3.0)
+1200 FORMAT ('       Forecast Output Increment: ',I2,' Hours')
+1250 FORMAT ('       Forecast Output Records (per file): ',I3)
+ 
+!
+! CLOSE STANDARD FILE
+!
+CALL FSTD_CLOSE (IUNIT)
+ 
+END SUBROUTINE FSTD_GET_DATA
+ 
+!/ ------------------------------------------------------------------- /
+!/ End of FSTD_GET_DATA subroutine------------------------------------ /
+!/ ------------------------------------------------------------------- /
+
+SUBROUTINE FSTD_GET_VECTOR_ROTATION(DIRDELTA, NI, NJ, GRTYP, & 
+                                    IG1, IG2, IG3, IG4, TRIMIJ, IUNIT)
+!/
+!/                  +-----------------------------------+
+!/                  |           B. Pouliot              |
+!/                  |                        FORTRAN 90 |
+!/                  | Last update :         25-Jul-2016 |
+!/                  +-----------------------------------+
+!/
+!/   25-Jul-2016 : Creation                            ( version 4.18_EC )
+!
+!  1. Purpose :
+!       Get rotation of vector fields at each point to allow use 
+!       of different grids
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       DIRDELTA   Real,Array O  Delta of directions on grid
+!       NI,NJ      Int.       I  Domain dimensions
+!       GRTYP      Character  I  Grid Type
+!       IG1/2/3/4  Int.       I  Positional records info
+!       TRIMIJ     Int        I  Remove rows from grid (i_start, j_start, i_end, j_end)
+!       IUNIT      Int.       I  File descriptor
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      EZQKDEF   Subr.   E       CMC-RPN library routine
+!      EZDEFSET  Subr.   E       CMC-RPN library routine
+!      EZWDINT   Subr.   E       CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Internally from this module
+!     ww3_ousf
+!
+!  6. Error messages :
+!
+!       None
+!
+!  7. Remarks :
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+!
+! INTERFACE VARIABLES
+!
+REAL, ALLOCATABLE, INTENT(OUT) :: DIRDELTA(:,:)
+INTEGER,           INTENT(IN)  :: IUNIT    !! FORTRAN UNIT ASSOCIATED TO FILE
+INTEGER,           INTENT(IN)  :: IG1, IG2, IG3, IG4, NI, NJ
+CHARACTER(len=1),  INTENT(IN)  :: GRTYP
+INTEGER,           INTENT(IN)  :: TRIMIJ(4)
+
+!
+! LOCAL VARIABLES.
+!
+INTEGER           :: IER, I, J, GDIN
+REAL, ALLOCATABLE :: SPDDUMMY(:,:), DIRDELTATRIM(:,:)
+REAL, ALLOCATABLE :: UNORTH(:,:), VNORTH(:,:)
+INTEGER           :: NI2, NJ2, IS, IE, JS, JE
+
+!
+! RPN FUNCTIONS AND MACROS USED
+!
+INTEGER, EXTERNAL :: EZQKDEF, EZDEFSET, EZWDINT, EZUVINT
+
+
+   NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+   NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+   IS = TRIMIJ(1) + 1
+   IE = NI - TRIMIJ(3)
+   JS = TRIMIJ(2) + 1
+   JE = NJ - TRIMIJ(4)
+ 
+   ALLOCATE(DIRDELTA(NI,NJ))
+   DIRDELTA = 0.0
+
+   IF(GRTYP .NE. 'M') THEN
+     ALLOCATE(UNORTH(NI2,NJ2))
+     ALLOCATE(VNORTH(NI2,NJ2))
+     ALLOCATE(SPDDUMMY(NI2,NJ2))
+     ALLOCATE(DIRDELTATRIM(NI2,NJ2))
+
+!    Define grid
+     GDIN = EZQKDEF(NI2, NJ2, GRTYP, IG1, IG2, IG3, IG4, IUNIT)
+
+!    Define output grid and define grid set
+     ier = EZDEFSET(GDIN, GDIN)
+
+!    Unit north wind at each grid point
+     DO J=1,NJ2
+       DO I=1,NI2
+         VNORTH(I,J) = -1
+         UNORTH(I,J) = 0
+       END DO
+     END DO
+
+!    EZWDINT crashes unless EZUVINT is executed first; remove when fixed
+     ier = EZUVINT(SPDDUMMY, DIRDELTATRIM, UNORTH, VNORTH)
+
+!    Convert wind components (in grid direction)
+!    to wind speed and wind direction (meteorological)
+     ier = EZWDINT(SPDDUMMY, DIRDELTATRIM, UNORTH, VNORTH)
+
+     DO J=JS,JE
+       DO I=IS,IE
+         DIRDELTA(I,J) = DIRDELTATRIM(I-IS+1,J-JS+1)
+       END DO
+     END DO
+   END IF
+
+END SUBROUTINE FSTD_GET_VECTOR_ROTATION
+ 
+ 
+SUBROUTINE ROTATE_VECTOR(DIRDELTA, SPDTHRESH, UIN, VIN, UOUT, VOUT, SPD, DIRMET)
+!/
+!/                  +-----------------------------------+
+!/                  |           B. Pouliot              |
+!/                  |                        FORTRAN 90 |
+!/                  | Last update :         26-Jul-2016 |
+!/                  +-----------------------------------+
+!/
+!/   26-Jul-2016 : Creation                            ( version 4.18_EC )
+!
+!  1. Purpose :
+!       Apply rotation of vector fields at each point to allow use 
+!       of different grids
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       DIRDELTA   Real I  Delta of directions on grid
+!       SPDTHRESH  Real I  Speed threshold under which direction is marked as UNDEF
+!       UIN,VIN    Real I  Vector field
+!       UOUT,VOUT  Real O  Vector field rotated
+!       SPD        Real O  Vector module
+!       DIRMET     Real O  Vecor direction (meteorological)
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Internally from this module
+!     ww3_ousf
+!
+!  6. Error messages :
+!
+!       None
+!
+!  7. Remarks :
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+!
+! INTERFACE VARIABLES
+!
+REAL, INTENT(IN)     :: DIRDELTA
+REAL, INTENT(IN)     :: SPDTHRESH
+REAL, INTENT(IN)     :: UIN, VIN
+REAL, INTENT(OUT)    :: UOUT, VOUT
+REAL, INTENT(OUT)    :: SPD, DIRMET
+
+!
+! LOCAL VARIABLES.
+!
+REAL              :: DIROUTRAD
+
+   IF(UIN /= UNDEF .AND. VIN /= UNDEF) THEN
+      SPD = SQRT(UIN**2 + VIN**2)
+      DIRMET = MOD(630. - RADE * ATAN2(VIN, UIN), 360.)
+      DIROUTRAD = DERA * (DIRMET + DIRDELTA)
+      UOUT = -SPD * SIN(DIROUTRAD)
+      VOUT = -SPD * COS(DIROUTRAD)
+      IF( SPD < SPDTHRESH ) DIRMET = UNDEF
+   ELSE
+      UOUT = UNDEF
+      VOUT = UNDEF
+      SPD = UNDEF
+      DIRMET = UNDEF
+   END IF
+
+END SUBROUTINE ROTATE_VECTOR
+ 
+ 
+SUBROUTINE FSTD_OPEN (FILENAME, IUNIT, FTYPE, IOS)
+!/
+!/                  +-----------------------------------+
+!/                  |           J. McLean               |
+!/                  |                        FORTRAN 90 |
+!/                  | Last upDATE :         30-Oct-2012 |
+!/                  +-----------------------------------+
+!/
+!/   14-May-2012 : Creation                            ( version 4.04_EC )
+!
+!  1. Purpose :
+!     To open a CMC-RPN Standard File.
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       FILENAME   Character  I  File name
+!       IUNIT      Int.       I  File descriptor
+!       FTYPE       Character  I  File type
+!       IOS        Int.       O  Error code
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      FSTOUV    Subr.   E       CMC-RPN library routine
+!      FSTFRM    Subr.   E       CMC-RPN library routine
+!      FNOM      Subr.   E       CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Internally from this module
+!
+!  6. Error messages :
+!
+!       None
+!
+!  7. Remarks :
+!
+!     Based on work used to create Standard Files from EC's WAM output.
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+!
+! INTERFACE VARIABLES
+!
+CHARACTER(len=80),INTENT(IN)  :: FILENAME !! STANDARD FILENAME
+CHARACTER(len=*), INTENT(IN)  :: FTYPE     !! FILE TYPE (Read-only, Read-Write)
+INTEGER                       :: IUNIT    !! FORTRAN UNIT ASSOCIATED TO FILE
+INTEGER,          INTENT(OUT) :: IOS
+ 
+!
+! LOCAL VARIABLES.
+!
+INTEGER   :: IER, LEN
+ 
+!
+! RPN FUNCTIONS AND MACROS USED
+!
+INTEGER, EXTERNAL :: FNOM, FCLOS, FSTOUV
+ 
+IOS = -1
+ 
+!
+! OPEN STANDARD FILE
+!
+LEN = LEN_TRIM(FILENAME)
+IF (LEN.EQ.0) RETURN
+ 
+IER = FNOM(IUNIT, FILENAME, FTYPE, 0)
+ 
+IF( IER.LT.0 ) THEN
+    WRITE (NDSE,*) ' ****************************************************'
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' *         FATAL ERROR IN SUB. FSTD_OPEN            *'
+    WRITE (NDSE,*) ' *       =================================          *'
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' *          CANNOT OPEN FILE                        *'
+    WRITE (NDSE,*) ' *     FUNCTION    = FNOM()                         *'
+    WRITE (NDSE,*) ' *     FILENAME    =  ', FILENAME
+    WRITE (NDSE,*) ' *     IUNIT       =  ', IUNIT
+    WRITE (NDSE,*) ' *     TYPE_ACCESS =  ', FTYPE
+    WRITE (NDSE,*) ' *     IER         =  ', IER
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' ****************************************************'
+    RETURN
+END IF
+ 
+IER = FSTOUV(IUNIT, 'RND')
+ 
+IF( IER.LT.0 ) THEN
+    WRITE (NDSE,*) ' ****************************************************'
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' *         FATAL ERROR IN SUB. FSTD_OPEN            *'
+    WRITE (NDSE,*) ' *       =================================          *'
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' *          CANNOT OPEN FILE                        *'
+    WRITE (NDSE,*) ' *     FUNCTION    = FSTDOUV()                      *'
+    WRITE (NDSE,*) ' *     FILENAME    =  ', FILENAME
+    WRITE (NDSE,*) ' *     IUNIT       =  ', IUNIT
+    WRITE (NDSE,*) ' *     TYPE_ACCESS =  ', FTYPE
+    WRITE (NDSE,*) ' *     IER         =  ', IER
+    WRITE (NDSE,*) ' *                                                  *'
+    WRITE (NDSE,*) ' ****************************************************'
+    IER = FCLOS(IUNIT)
+    RETURN
+END IF
+ 
+IOS = 0
+ 
+END SUBROUTINE FSTD_OPEN
+!/ ------------------------------------------------------------------- /
+!/ End of FSTD_OPEN subroutine---------------------------------------- /
+!/ ------------------------------------------------------------------- /
+ 
+ 
+ 
+ 
+SUBROUTINE FSTD_CLOSE (IUNIT)
+!/
+!/                  +-----------------------------------+
+!/                  |           J. McLean               |
+!/                  |                        FORTRAN 90 |
+!/                  | Last upDATE :         30-Oct-2012 |
+!/                  +-----------------------------------+
+!/
+!/   14-May-2012 : Creation                            ( version 4.04_EC )
+!
+!  1. Purpose :
+!     To close a CMC-RPN Standard File.
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       IUNIT      Int.       I  File descriptor
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      FCLOS     Subr.   E       CMC-RPN library routine
+!      FSTFRM    Subr.   E       CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     Internal to this module
+!
+!  6. Error messages :
+!
+!     None
+!
+!  7. Remarks :
+!
+!     Based on work used to create Standard Files from EC's WAM output.
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+!
+! INTERFACE VARIABLES
+!
+INTEGER,   INTENT(IN)  :: IUNIT       !! FORTRAN UNIT ASSOCIATED TO FILE
+ 
+!
+! RPN FUNCTIONS AND MACROS USED
+!
+EXTERNAL FCLOS, FSTFRM
+INTEGER :: FCLOS, FSTFRM
+ 
+INTEGER  :: IOS
+ 
+!
+! CLOSE STANDARD FILE
+!
+IOS = FSTFRM(IUNIT)
+IOS = FCLOS(IUNIT)
+ 
+END SUBROUTINE FSTD_CLOSE
+ 
+!/ ------------------------------------------------------------------- /
+!/ End of FSTD_CLOSE subroutine--------------------------------------- /
+!/ ------------------------------------------------------------------- /
+ 
+ 
+!/ ------------------------------------------------------------------- /
+   SUBROUTINE FSTD_CREATE_GRID (IUN, NI, NJ, IDATEC, ITIMEC, &
+                                SWLAT, SWLON, DLAT, DLON, ETIKET, &
+                                IP1Z, IP2Z, IP3Z, NPAK, GRTYP, &
+                                IG1, IG2, IG3, IG4, DATYP, TYPVAR, TRIMIJ)
+!/
+!/               +-----------------------------------+
+!/               |           J. McLean               |
+!/               |                                   |
+!/               | Based on work by                  |
+!/               ! Yves Chartier of CMC   FORTRAN 90 |
+!/               |                                   |
+!/               | Last upDATE :         30-Aug-2012 |
+!/               +-----------------------------------+
+!/
+!/   14-May-2012 : Creation                            ( version 4.04_EC )
+!/   21-Jul-2016 : Support for 'Z' grid with rotation  ( version 4.18_EC )
+!
+!  1. Purpose :
+!
+!     Creation of a CMC-RPN 'Z' grid that is mapped on a latlon grid.
+!
+!     Requires: grid dimensions, lat-lon of southwest corner of grid,
+!               and grid spacing
+!
+!  3. Parameters :
+!
+!     Parameter list
+!     ----------------------------------------------------------------
+!       IUN      INTEGER     SFF unit number (output)
+!       NI       INTEGER     First dimension of array
+!       NJ       INTEGER     Second dimension of array
+!       IDATEC    INTEGER    CMC style DATEstamp
+!       ITIMEC    INTEGER    CMC style timestamp
+!       ETIKET    CHARACTER(12) Etiket
+!       IP1Z      REAL       IG1 value that points to the IP1 value of the grid descriptor
+!       IP2Z      REAL       IG2 value that points to the IP2 value of the grid descriptor
+!       IP3Z      REAL       IG3 value that points to the IP3 value of the grid descriptor
+!       NPAK     INTEGER     Packing ratio of file
+!       GRTYP    CHARACTER   Grid type (L=Lat/Lon Regular Grid)
+!       IG1      INTEGER     IG1 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG2      INTEGER     IG2 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG3      INTEGER     IG3 value for ZE grid, 0 for auto-detect of ZL grd
+!       IG4      INTEGER     IG4 value for ZE grid, 0 for auto-detect of ZL grd
+!       DATYP    INTEGER     Data type
+!       TYPVAR   CHARACTER   Typvar for LA and LO
+!       TRIMIJ   INT         REMOVE ROWS FROM GRID (ISTART, JSTART, IEND, JEND)
+!     ----------------------------------------------------------------
+!
+!     Internal parameters
+!     ----------------------------------------------------------------
+!       SWLAT     REAL       Latitude of southwest corner of grid
+!       SWLON     REAL       Longitude of southwest corner of grid
+!       DLAT      REAL       Grid resolution in latitude direction
+!       DLON      REAL       Grid resolution in longitude direction
+ 
+ 
+!     ----------------------------------------------------------------
+!
+!  4. Subroutines used :
+!
+!      Name      Type  Module   Description
+!     ----------------------------------------------------------------
+!      CXGAIG    Subr.          CMC-RPN library routine
+!      CIGAXG    Subr.          CMC-RPN library routine
+!!      GFLLFXY   Subr.          CMC-RPN library routine
+!      FSTFRM    Subr.          CMC-RPN library routine
+!      FNOM      Subr.          CMC-RPN library routine
+!     ----------------------------------------------------------------
+!
+!  5. Called by :
+!
+!     W3OUSF Program
+!
+!  6. Error messages :
+!
+!  7. Remarks :
+!
+!
+!  8. Structure :
+!
+!     See source code.
+!
+!  9. Switches :
+!
+!       !/S  Enable subroutine tracing.
+!       !/T  Enable test output.
+!
+! 10. Source code :
+!
+!/ ------------------------------------------------------------------- /
+ 
+      USE W3GDATMD, ONLY: XGRD, YGRD, SX, SY, NTRI, TRIGP
+      USE W3SERVMD, ONLY: EXTCDE
+
+      IMPLICIT NONE
+ 
+      INTEGER, INTENT(IN) :: IUN, NI, NJ, IDATEC, ITIMEC, NPAK, DATYP
+      CHARACTER(len=12), INTENT(IN) :: ETIKET
+      INTEGER, INTENT(OUT) :: IP1Z, IP2Z, IP3Z
+      CHARACTER(len=1), INTENT(IN) :: GRTYP
+      INTEGER, INTENT(IN) :: IG1, IG2, IG3, IG4
+      CHARACTER(len=2), INTENT(IN)::TYPVAR
+      INTEGER, INTENT(IN)     ::  TRIMIJ(4)
+
+      INTEGER                 ::  IG(4)
+      REAL, DIMENSION(:), ALLOCATABLE:: XAXIS, YAXIS, ZAXIS
+      REAL, DIMENSION(:,:), ALLOCATABLE:: LA, LO, LA2, LO2
+      INTEGER, ALLOCATABLE :: TRIGPFLAT (:)
+ 
+      INTEGER  IERR, i, j
+      INTEGER, EXTERNAL :: FSTECR, NEWDATE
+ 
+      CHARACTER(len=4)::NOMVAR
+      CHARACTER(len=2)::TYPVARP
+      CHARACTER(len=1)::GRREF, GRLALO
+ 
+      INTEGER IP1,IP2,IP3, NK
+      INTEGER NITIC, NJTIC, NITAC, NJTAC
+      INTEGER DEET, NPAS, nbits
+      INTEGER YYYYMMDD,HHMMSSSS, IDATEO
+      INTEGER seed
+      REAL XG1, XG2, XG3, XG4
+      REAL SWLAT, SWLON, DLAT, DLON
+      REAL SWLATREF, SWLONREF, DLATREF, DLONREF
+      LOGICAL REWRIT
+      INTEGER NI2, NJ2, IS, IE, JS, JE
+      INTEGER NDSE
+
+      NDSE = 6
+
+      NI2 = NI - TRIMIJ(1) - TRIMIJ(3)
+      NJ2 = NJ - TRIMIJ(2) - TRIMIJ(4)
+      IS = TRIMIJ(1) + 1
+      IE = NI - TRIMIJ(3)
+      JS = TRIMIJ(2) + 1
+      JE = NJ - TRIMIJ(4)
+ 
+      IF ( GRTYP .EQ. 'M' ) THEN
+        IF ( ANY(TRIMIJ .NE. 0) ) THEN
+          WRITE (NDSE,1010)
+          CALL EXTCDE ( 1 )
+        END IF
+
+        GRLALO = 'Y'
+        NITIC = NI
+        NJTIC = 1
+        NITAC = NI
+        NJTAC = 1
+        ALLOCATE(XAXIS(NI), YAXIS(NI))
+        ALLOCATE(LA(NI,1), LO(NI,1))
+        ALLOCATE(LA2(NI,1), LO2(NI,1))
+      ELSE
+        GRLALO = 'Z'
+        NITIC = NI2
+        NJTIC = 1
+        NITAC = 1
+        NJTAC = NJ2
+        ALLOCATE(XAXIS(NI2), YAXIS(NJ2))
+        ALLOCATE(LA(NI,NJ), LO(NI,NJ))
+        ALLOCATE(LA2(NI2,NJ2), LO2(NI2,NJ2))
+      END IF
+
+      NK  = 1
+      ALLOCATE(ZAXIS(NK))
+      ZAXIS(1) = 0.
+ 
+!     Initialization of the necessary standard file parameters
+!     required to write a record
+      DEET = 0
+      NPAS = 0
+      TYPVARP = 'X'
+      REWRIT = .true.
+
+!     Calculate "IDATEO" based on inputs "iDATEc" and "itimec"
+ 
+      YYYYMMDD = IDATEC
+      HHMMSSSS = ITIMEC*100
+      IERR =  NEWDATE(IDATEO,YYYYMMDD,HHMMSSSS,3)
+
+      LA = TRANSPOSE(YGRD)
+      LO = TRANSPOSE(XGRD)
+
+      IF ( GRTYP .EQ. 'M' ) THEN
+        GRREF  = 'L'
+        IG(1) = 0
+        IG(2) = 0
+        IG(3) = 0
+        IG(4) = 0
+
+        XAXIS = LO(:, 1)
+        YAXIS = LA(:, 1)
+      ELSE
+        IF (IG1 .EQ. 0 .AND. IG2 .EQ. 0 .AND. IG3 .EQ. 0 .AND. IG4 .EQ. 0) THEN
+!       Assume ZL grid
+          GRREF  = 'L'
+
+          SWLON = XGRD(1,1)
+          SWLAT = YGRD(1,1)
+          DLON = SX
+          DLAT = SY
+
+!         Computation of ig parameters for defining a z-grid in a latlon
+!         space. The values are such that the lat-lon can be encoded
+!         "as is" in the navigational records without supplemental conversion
+
+          SWLATREF = 0.0
+          SWLONREF = 0.0
+          DLONREF = 1.0
+          DLATREF = 1.0
+ 
+          CALL CXGAIG('L', IG(1), IG(2), IG(3), IG(4), SWLATREF, SWLONREF,          &
+                      DLATREF, DLONREF)
+
+        ELSE
+!         Assume ZE grid
+          IG(1) = IG1
+          IG(2) = IG2
+          IG(3) = IG3
+          IG(4) = IG4
+          GRREF  = 'E'
+        END IF
+
+!       Initialisation of the axes values
+        DO i=IS,IE
+          XAXIS(i-is+1) = SWLON + DLON * (i - 1)
+        END DO
+
+        DO j=JS,JE
+          YAXIS(j-js+1) = SWLAT + DLAT * (j - 1)
+        END DO
+      END IF
+
+!     Compute unique set of ip1z ip2z from crc checksum of the grid descriptors
+     seed = 0
+     call descr_signature(IP1Z,IP2Z,IP3Z,seed,xaxis,yaxis,zaxis,ni2,nj2,1,ig,4)
+ 
+!     Write the navigational records into the standard file
+!     with full precision (IEEE 32 bits)
+
+       NOMVAR = '>>'
+       IERR=FSTECR(XAXIS, XAXIS, -32, IUN, IDATEO, DEET, NPAS, NITIC, NJTIC, NK, &
+       &           IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IG(2), IG(3), IG(4), 5, REWRIT)
+
+
+       NOMVAR = '^^'
+       IERR=FSTECR(YAXIS, YAXIS, -32, IUN, IDATEO, DEET, NPAS, NITAC, NJTAC, NK, &
+       &           IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, GRREF, IG(1),  &
+       &           IG(2), IG(3), IG(4), 5, REWRIT)
+!
+
+!     Write node list for M grids
+      IF ( GRTYP .EQ. 'M' ) THEN
+        NOMVAR = '##'
+        IF(.NOT. ALLOCATED(TRIGPFLAT)) ALLOCATE(TRIGPFLAT(3*NTRI))
+        TRIGPFLAT = RESHAPE(TRANSPOSE(TRIGP), (/3*NTRI/)) - 1
+
+        IERR=FSTECR(TRIGPFLAT, TRIGPFLAT, -32, IUN, IDATEO, DEET, NPAS,     &
+        &           3*NTRI, 1, 1, IP1Z, IP2Z, IP3Z, TYPVARP, NOMVAR, ETIKET, &
+        &           'X', IP1Z, IP2Z, IP3Z, 3, 2, REWRIT)
+      END IF
+
+!    Write the contents of 'LA' and 'LO' in the standard file.
+ 
+      IP1 = 0
+      IP2 = 0
+      IP3 = 0
+
+      LA2 = LA(IS:IE,JS:JE)
+      LO2 = LO(IS:IE,JS:JE)
+
+      NOMVAR = 'LA'
+      IERR=FSTECR(LA2, LA2, NPAK, IUN, IDATEO, DEET, NPAS, NI2, NJ2, NK, &
+      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
+      &           IP2Z, IP3Z, 0, DATYP, REWRIT)
+ 
+      NOMVAR = 'LO'
+      IERR=FSTECR(LO2, LO2, NPAK, IUN, IDATEO, DEET, NPAS, NI2, NJ2, NK, &
+      &           IP1, IP2, IP3, TYPVAR, NOMVAR, ETIKET, GRLALO, IP1Z,  &
+      &           IP2Z, IP3Z, 0, DATYP, REWRIT)
+ 
+     return
+
+ 1010 FORMAT (/' *** WAVEWATCH III ERROR IN W3FSTDMD : '/              &
+               '     TRIMIJ SHOULD BE ALL 0 FOR M GRIDS'/)
+ 
+  END SUBROUTINE FSTD_CREATE_GRID
+ 
+!/ ------------------------------------------------------------------- /
+!/ End of FSTD_CREATE_GRID subroutine--------------------------------- /
+!/ ------------------------------------------------------------------- /
+ 
+subroutine descr_signature ( out_ig1, out_ig2, out_ig3, seed, longs, lats, vert, &
+                             ni, nj, nk, extra, nextra )
+  implicit none
+  integer, intent(OUT)    :: out_ig1, out_ig2, out_ig3
+  integer, intent(IN)     :: seed
+  integer, intent(IN)     :: ni, nj, nk, nextra
+  real, intent(IN)        :: longs(ni), lats(nj), vert(nk)
+  integer, intent(IN)     :: extra(nextra)
+
+  !
+  ! author
+  !   M. Lepine  -  Nov 2014
+  !
+  ! out_ig1, out_ig2 : crc computed ig1, ig2
+  ! seed             : first crc seed
+  ! longs            : ">>" descriptor record
+  ! lats             : "^^" descriptor record
+  ! vert             : "!!" descriptor record
+  ! ni,nj,nk         : dimensions of respectively longs,lats and vert
+  ! extra            : extra vector of elements (dimension nextra) for the crc, usualy ig1 to ig4 
+
+  integer, PARAMETER :: nbytes=4
+  integer            :: crc
+  
+  ! External functions
+  integer, external :: f_crc32, ezgdef_fmem, gdll
+
+  crc = f_crc32 (seed, longs,  ni*nbytes )
+  crc = f_crc32 (crc,  lats,   nj*nbytes )
+  crc = f_crc32 (crc,  vert,   nk*nbytes )
+  crc = f_crc32 (crc,  extra , nextra*nbytes )
+ 
+  out_ig1 = ibits(crc,0,16)
+  out_ig2 = ibits(crc,16,16)
+  out_ig3 = 0
+
+  return
+
+end subroutine descr_signature
+ 
+end module w3fstdmd
