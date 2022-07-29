@@ -117,7 +117,7 @@
 
   # netcdf library dir
   if [ "$netcdf_compile" = 'yes' ] ; then
-    if [ "$mpi_mod" = 'no' ]; then comp="`$NETCDF_CONFIG --fc`"; fi
+#    if [ "$mpi_mod" = 'no' ]; then comp="`$NETCDF_CONFIG --fc`"; fi
     libs="$libs `$NETCDF_CONFIG --flibs` `$NETCDF_CONFIG --libs`"
   fi
 
