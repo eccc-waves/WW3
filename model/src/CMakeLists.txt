@@ -102,6 +102,10 @@ set(programs ww3_strt ww3_grid ww3_bound ww3_outf ww3_outp ww3_trck ww3_grib
 # Executables to build if NetCDF is found
 set(netcdf_programs ww3_ounf ww3_ounp ww3_bounc ww3_trnc ww3_prnc)
 
+set(cmc_programs ww3_rstrt ww3_bounm ww3_ousf ww3_prsf)
+list(APPEND programs ${cmc_programs})
+target_link_libraries(ww3_lib PUBLIC rmn)
+
 if("OASIS" IN_LIST switches)
   find_package(OASIS REQUIRED)
   target_link_libraries(ww3_lib PUBLIC OASIS::OASIS)
