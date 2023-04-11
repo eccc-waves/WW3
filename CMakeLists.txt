@@ -30,6 +30,7 @@ list(TRANSFORM EXCLUDE_FIND TOLOWER)
 
 # Make Find modules visible to CMake
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "/home/bpo001/models/cmake_rpn")
 
 # Set switch file on command line when running CMake
 set(SWITCH "" CACHE STRING "Switch file, either full path, relative path from location of top-level WW3/ dir, or a switch in model/bin")
