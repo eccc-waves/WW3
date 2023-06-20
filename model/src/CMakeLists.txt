@@ -104,7 +104,8 @@ set(netcdf_programs ww3_ounf ww3_ounp ww3_bounc ww3_trnc ww3_prnc)
 
 set(cmc_programs ww3_rstrt ww3_bounm ww3_ousf ww3_prsf)
 list(APPEND programs ${cmc_programs})
-target_link_libraries(ww3_lib PUBLIC rmn)
+find_package(rmn ${rmn_REQ_VERSION} COMPONENTS static REQUIRED)
+target_link_libraries(ww3_lib PUBLIC rmn::rmn)
 
 if("OASIS" IN_LIST switches)
   find_package(OASIS REQUIRED)

@@ -42,8 +42,6 @@ include(ec_compiler_presets)
 set(MPI_COMPILER_FLAGS "${MPI_COMPILER_FLAGS} -static_mpi -nostrip")
 set(STATIC_LINK_INTEL_FLAGS "-static-libgcc -static-libstdc++ -qopenmp-link=static")
 
-find_package(MPI)
-
 #include(ec_openmp)           # Enable OpenMP (-DWITH_OPENMP=TRUE)
 
 # Override ec_compiler preset fortran standard
@@ -53,8 +51,6 @@ string(REPLACE "-stand f08" "" CMAKE_Fortran_FLAGS ${CMAKE_Fortran_FLAGS})
 # With intel 2021+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${STATIC_LINK_INTEL_FLAGS}")
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -static-intel ${STATIC_LINK_INTEL_FLAGS}")
-
-find_package(rmn ${rmn_REQ_VERSION} COMPONENTS static REQUIRED)
 
 # Printing flags
 message(STATUS "(EC) CMAKE_C_FLAGS=${CMAKE_C_FLAGS}")
