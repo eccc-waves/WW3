@@ -39,6 +39,31 @@ list(TRANSFORM EXCLUDE_FIND TOLOWER)
 # Make Find modules visible to CMake
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+#----- Append EC specific module path
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_rpn/modules $ENV{EC_CMAKE_MODULE_PATH})
+
+include(ec_init)           # Include EC specific cmake utils
+
+include(ec_compiler_presets)
+
+# Use static MPI libraries: must be set before calling find_package(MPI)
+set(MPI_COMPILER_FLAGS "${MPI_COMPILER_FLAGS} -static_mpi -nostrip")
+set(STATIC_LINK_INTEL_FLAGS "-static-libgcc -static-libstdc++ -qopenmp-link=static")
+
+#include(ec_openmp)           # Enable OpenMP (-DWITH_OPENMP=TRUE)
+
+# Override ec_compiler preset fortran standard
+string(REPLACE "-stand f08" "" CMAKE_Fortran_FLAGS ${CMAKE_Fortran_FLAGS})
+#string(REPLACE "-stand f08" "-stand f95" CMAKE_Fortran_FLAGS ${CMAKE_Fortran_FLAGS})
+
+# With intel 2021+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${STATIC_LINK_INTEL_FLAGS}")
+set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -static-intel ${STATIC_LINK_INTEL_FLAGS}")
+
+# Printing flags
+message(STATUS "(EC) CMAKE_C_FLAGS=${CMAKE_C_FLAGS}")
+message(STATUS "(EC) CMAKE_Fortran_FLAGS=${CMAKE_Fortran_FLAGS}")
+
 # Set switch file on command line when running CMake
 set(SWITCH "" CACHE STRING "Switch file, either full path, relative path from location of top-level WW3/ dir, or a switch in model/bin")
 
