@@ -2019,6 +2019,7 @@ CONTAINS
     REAL                    :: TSTR, TMAX, DT, T, MFT
     REAL                    :: PB(NSPEC), PB2(NSPEC), BRM12(NK), BTOVER
     REAL                    :: KO, LMODULATION(NTH)
+    REAL                    :: SSDSC1
     !/
     !/ ------------------------------------------------------------------- /
     !/
@@ -2273,6 +2274,7 @@ CONTAINS
       !
       ! 2.b             Computes spontaneous breaking for T500 (Filipot et al. JGR 2010)
       !
+      SSDSC1 = 1.
       E1 = 0.
       HS = 0.
       SRHS  = 0.
@@ -2408,7 +2410,7 @@ CONTAINS
         END IF
       END DO
       !
-      PB = (1-SSDSC(1))*PB2*A + SSDSC(1)*PB
+      PB = (1-SSDSC1)*PB2*A + SSDSC1*PB
       ! Compute Lambda = PB* l(k,th)
       ! with l(k,th)=1/(2*pi²)= the breaking crest density
       BRLAMBDA = PB / (2.*PI**2.)
