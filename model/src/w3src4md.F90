@@ -2410,6 +2410,33 @@ CONTAINS
         END IF
       END DO
       !
+      ! 2.a.1 Computes saturation
+      !
+      EPSR = SQRT(SSDSBR)
+      BTH(:) = 0.
+
+      DO  IK=IK1, NK
+        FACSAT=SIG(IK)*K(IK)**3*DTH
+        IS0=(IK-1)*NTH
+        BTH(IS0+1)=0.
+
+        IF (SSDSDTH.GE.180) THEN  ! integrates around full circle
+          ASUM = SUM(A(IS0+1:IS0+NTH))
+          BTH(IS0+1:IS0+NTH)=ASUM*FACSAT
+        ELSE
+          DO ITH=1,NTH            ! partial integration
+            IS=ITH+(IK-1)*NTH
+            BTH(IS)=DOT_PRODUCT(SATWEIGHTS(:,ITH),  A(IS0+SATINDICES(:,ITH)) ) &
+                 *FACSAT
+          END DO
+        END IF
+      END DO !NK END
+      !
+      ! Computes Breaking probability
+      !
+      PB = (MAX(SQRT(BTH)-EPSR,0.))**2
+      PB = PB * 28.16
+      !
       PB = (1-SSDSC1)*PB2*A + SSDSC1*PB
       ! Compute Lambda = PB* l(k,th)
       ! with l(k,th)=1/(2*pi²)= the breaking crest density
