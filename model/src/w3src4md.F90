@@ -2442,6 +2442,8 @@ CONTAINS
       ! with l(k,th)=1/(2*pi²)= the breaking crest density
       BRLAMBDA = PB / (2.*PI**2.)
       !
+      SRHS = DDIAG * A
+      !
     CASE(3)
       !
       ! 2c Romero (GRL 2019)
