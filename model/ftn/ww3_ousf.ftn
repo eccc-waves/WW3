@@ -872,7 +872,7 @@ CONTAINS
                 END DO
             NOM1 = "UDST"
             NOM2 = "VDST"
-            EIP1 = 60068832
+            EIP1 = 60268832
             CALL SETMASK(UNDEF,NX,NY,XX,FIELDMASK)
             WRITE(NDSO,'(A)') 'Wind - UU Component'
             ! Write the UU field to standard file (XX)
