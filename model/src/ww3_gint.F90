@@ -364,8 +364,8 @@ PROGRAM W3GRID_INTERP
     !
 #ifdef W3_OMPG
     !$OMP PARALLEL DO DEFAULT(NONE) &
-    !$OMP PRIVATE(ISEA,IX,IY,DAREA,COUNTG,IG,INGRID,ITOUT,IS,JS,RW,SAREA,I,XCRNR,YCRNR,DT,SXT,SYT,NS,TMP_INDX,COUNTF,SUMWT,JG,X0,Y0,XT,YT,BRNCHCL,BRNCHCR,IXT,IYT,XTT,INGRD,MAPINT) &
-    !$OMP SHARED(NSEA,MAPSF,GR_INTS,GSQRT,NG,GRIDS,INTMETHOD,XGRD,YGRD,NX,NY,FLAGLL,ICLOSE,L360,LPLC,MAPST2,MAPSTA,INT_MAP)
+    !$OMP PRIVATE(ISEA,IX,IY,DAREA,COUNTG,IG,INGRID,ITOUT,IS,JS,RW,SAREA,I,XCRNR,YCRNR,DT,SXT,SYT,NS,TMP_INDX,COUNTF,SUMWT,JG,X0,Y0,XT,YT,BRNCHCL,BRNCHCR,IXT,IYT,XTT,INGRD) &
+    !$OMP SHARED(NSEA,MAPSF,GR_INTS,GSQRT,NG,GRIDS,INTMETHOD,XGRD,YGRD,NX,NY,FLAGLL,ICLOSE,L360,LPLC,MAPSTA,INT_MAP)
 #endif
     DO ISEA = 1, NSEA
       !
@@ -756,6 +756,16 @@ PROGRAM W3GRID_INTERP
       !
       GR_INTS(ISEA)%NGRDS = COUNTG
       !
+    END DO       ! End of loop through all wet points
+#ifdef W3_OMPG
+    !$OMP END PARALLEL DO
+#endif
+    !
+    DO ISEA = 1, NSEA
+      !
+      IX = MAPSF(ISEA,1)
+      IY = MAPSF(ISEA,2)
+      !
       ! 4.b.vii Check to see if interpolation weights found.
       !        Status of output points with / without weights set in MAPST2
       !        using the next available bit
@@ -772,9 +782,6 @@ PROGRAM W3GRID_INTERP
       END IF
       !
     END DO       ! End of loop through all wet points
-#ifdef W3_OMPG
-    !$OMP END PARALLEL DO
-#endif
     !
     ! Now dumps the coefficients to file ...
     WRITE(994) NSEA
