@@ -990,6 +990,7 @@
                            INPUT_FIELD,DATARR,IOS,NRECORDS,TIME_Interval,INITTIME)
 !       WRITE(*,*) "NBB call to fstgetdata", DATARR(1:720,1:43,1:3,1)
         WRITE(*,*) "AFTER FSTD_GET_DATA"
+        IF ( IOS .NE. 0 ) GOTO 866    ! EXIT with error message
 
       END DO
 !end of stdfile
@@ -1325,10 +1326,14 @@
   864 CONTINUE
       WRITE (NDSE,1064)
       CALL EXTCDE ( 54 )
-      
+!
   865 CONTINUE
       WRITE (NDSE,1065)
       CALL EXTCDE ( 55 )
+!
+  866 CONTINUE
+      WRITE (NDSE,1066)
+      CALL EXTCDE ( 56 )
 !
 !/O15  870 CONTINUE
 !/O15      WRITE (NDSE,1070) IDFLD, IERR
@@ -1513,6 +1518,8 @@
  1065 FORMAT (/' *** WAVEWATCH III ERROR IN W3PRSF : '/               &
                '     FLTIME set to false in ww3_prsf.inp' /           &
                '     is not compatible with STDF input mode' /)
+ 1066 FORMAT (/' *** WAVEWATCH III ERROR IN W3PRSF : '/               &
+               '     Problem with FSTD_GET_DATA' /)
              
 !/O15 1070 FORMAT (/' *** WAVEWATCH III ERROR IN W3PRSF : '/          &
 !/O15               '     ERROR IN CREATING A TIMES FILE FOR ',A/     &
