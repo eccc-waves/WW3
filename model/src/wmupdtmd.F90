@@ -195,8 +195,8 @@ CONTAINS
          TI3, TI4, TI5, JFIRST
 
     USE WMMDATMD, ONLY: IMPROC, MDSO, MDSS, MDST, MDSE, NMPSCR,     &
-         NMPERR, ETIME, FLLSTL, FLLSTR, FLLSTI,      &
-         INPMAP, IDINP, IFLSTI, IFLSTL, IFLSTR
+         NMPERR, ETIME, FLLSTL, FLLSTR, FLLSTI, FLLSTI1,      &
+         INPMAP, IDINP, IFLSTI, IFLSTI1, IFLSTL, IFLSTR
     !/
     IMPLICIT NONE
     !/
@@ -255,6 +255,7 @@ CONTAINS
     !
     FLLSTL = .FALSE.
     FLLSTI = .FALSE.
+    FLLSTI1 = .FALSE.
     FLLSTR = .FALSE.
     IERR   = 0
     !
@@ -345,8 +346,9 @@ CONTAINS
         IF ( TFN(1,J) .EQ. -1 ) THEN
           DTTST  = 0.
         ELSE
-          IF ( FIRST .OR. ( J.EQ.1 .AND. IFLSTL(-JJ) )          &
-               .OR. ( J.EQ.4 .AND. IFLSTI(-JJ) )          &
+          IF ( FIRST .OR. ( J.EQ.1 .AND. IFLSTL(-JJ) )      &
+               .OR. ( J.EQ.4 .AND. IFLSTI(-JJ) )            &
+               .OR. ( J.EQ.-7 .AND. IFLSTI1(-JJ) )          &
                .OR. ( J.EQ.6 .AND. IFLSTR(-JJ) ) ) THEN
             DTTST  = 1.
           ELSE
@@ -356,6 +358,7 @@ CONTAINS
         !
         IF ( J .EQ. 1 ) FLLSTL = IFLSTL(-JJ)
         IF ( J .EQ. 4 ) FLLSTI = IFLSTI(-JJ)
+        IF ( J .EQ. -7 ) FLLSTI1 = IFLSTI1(-JJ)
         IF ( J .EQ. 6 ) FLLSTR = IFLSTR(-JJ)
         !
 #ifdef W3_T
@@ -374,6 +377,7 @@ CONTAINS
           !
           IF ( J .EQ. 1 ) IFLSTL(-JJ) = FLLSTL
           IF ( J .EQ. 4 ) IFLSTI(-JJ) = FLLSTI
+          IF ( J .EQ. -7 ) IFLSTI1(-JJ) = FLLSTI1
           IF ( J .EQ. 6 ) IFLSTR(-JJ) = FLLSTR
           !
         END IF
@@ -426,7 +430,8 @@ CONTAINS
       DTTST  = DSEC21 ( TFN(:,J) , TDATA )
       IF ( DTTST.GT.0. .AND. .NOT.  ( (FLLSTL .AND. J.EQ.1) .OR.    &
            (FLLSTI .AND. J.EQ.4) .OR.    &
-           (FLLSTR .AND. J.EQ.6) ) ) THEN
+           (FLLSTR .AND. J.EQ.6) .OR.    &
+           (FLLSTI1 .AND. J.EQ.-7) ) ) THEN
         TDATA  = TFN(:,J)
       END IF
     END DO
@@ -598,7 +603,7 @@ CONTAINS
          MUDD, TI1, TI2, TI3, TI4, TI5, ICEP1,       &
          ICEP2, ICEP3, ICEP4, ICEP5
     USE WMMDATMD, ONLY: IMPROC, NMPERR, MDST, MDSE, MDSF, ETIME,    &
-         FLLSTL, FLLSTI, FLLSTR, RCLD, NDT, DATA0,   &
+         FLLSTL, FLLSTI, FLLSTI1, FLLSTR, RCLD, NDT, DATA0,   &
          DATA1, DATA2, NMV, NMVMAX, TMV, AMV, DMV
     !/
     IMPLICIT NONE
@@ -646,6 +651,7 @@ CONTAINS
       CALL W3FLDG ('READ', IDSTR, MDSF(IMOD,J), MDST, MDSEN,      &
            NX, NY, NX, NY, TIME, ETIME, DTIME,            &
            XXX, XXX, XXX, TI1, XXX, XXX, ICEP1, IERR)
+      IF ( IERR .LT. 0 ) FLLSTI1 = .TRUE.
       !
       ! -6.  Ice parameter 2 ---------------------------------------------- /
       !

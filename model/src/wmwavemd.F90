@@ -243,7 +243,7 @@ CONTAINS
          STIME, ETIME, NMV, TMV, AMV, DMV,           &
          NRGRD, NRGRP, GRANK, INGRP, GRDHGH, GRDEQL, &
          GRDLOW, TSYNC, TMAX, TOUTP, TDATA, GRSTAT,  &
-         FLLSTL, FLLSTI, FLLSTR, DTRES, FLGHG1,      &
+         FLLSTL, FLLSTI, FLLSTI1, FLLSTR, DTRES, FLGHG1,      &
          FLGHG2, MAPMSK
 #ifdef W3_MPI
     USE WMMDATMD, ONLY: MPI_COMM_MWAVE, MPI_COMM_GRD,          &
@@ -964,6 +964,7 @@ CONTAINS
               CALL W3WAVE ( I, DUMMY2, TSYNC(:,I), .FALSE., .TRUE. )
               IF ( FLLSTL ) INFLAGS1(1) = .FALSE.
               IF ( FLLSTI ) INFLAGS1(4) = .FALSE.
+              IF ( FLLSTI1 ) INFLAGS1(-7) = .FALSE.
               IF ( FLLSTR ) INFLAGS1(6) = .FALSE.
               !
               ! 5.b Stage data for grids with equal rank
@@ -1315,6 +1316,7 @@ CONTAINS
                 !
                 IF ( FLLSTL ) INFLAGS1(1) = .FALSE.
                 IF ( FLLSTI ) INFLAGS1(4) = .FALSE.
+                IF ( FLLSTI1 ) INFLAGS1(-7) = .FALSE.
                 IF ( FLLSTR ) INFLAGS1(6) = .FALSE.
                 !
                 ! 9.c Update TOUPT
