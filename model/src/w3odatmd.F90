@@ -748,6 +748,9 @@ CONTAINS
 #ifdef W3_BT4
     NOGE(1) = 10
 #endif
+#ifdef W3_IC4
+    NOGE(1) = 11
+#endif
 #ifdef W3_IS2
     NOGE(1) = 12    ! CB
 #endif
@@ -767,8 +770,11 @@ CONTAINS
 #ifdef W3_BT4
     IDOUT( 1, 10)  = 'Sediment diam D50   '
 #endif
+#ifdef W3_IC4
+    IDOUT( 1, 11)  = 'Ice thickness   '
+#endif
 #ifdef W3_IS2
-    IDOUT( 1, 11)  = 'ice thickness   '
+    IDOUT( 1, 11)  = 'Ice thickness   '
     IDOUT( 1, 12) = 'Avg. ice floe diam. '
 #endif
 #ifdef W3_SETUP

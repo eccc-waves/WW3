@@ -2718,6 +2718,18 @@ CONTAINS
     META(1)%VMAX = 32.0
 #endif
     ! IFI=1, IFJ=11, IC1
+#ifdef W3_IC4
+    META => GROUP(1)%FIELD(11)%META
+    META(1)%FSC = 0.001
+    META(1)%UNITS = 'm'
+    META(1)%ENAME = '.ic1'
+    META(1)%VARNM='ic1'
+    META(1)%VARNL='ice thickness'
+    META(1)%VARNS='sea_ice_thickness'
+    META(1)%VARNG='ice_thickness'
+    META(1)%VMIN = 0
+    META(1)%VMAX = 30
+#endif
 #ifdef W3_IS2
     META => GROUP(1)%FIELD(11)%META
     META(1)%FSC = 0.001

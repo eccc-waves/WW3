@@ -1158,6 +1158,9 @@ CONTAINS
 #ifdef W3_BT4
     SED_D50  = UNDEF
 #endif
+#ifdef W3_IC4
+    ICEH     = UNDEF
+#endif
 #ifdef W3_IS2
     ICEH     = UNDEF
     ICEF     = UNDEF
@@ -1662,6 +1665,19 @@ CONTAINS
                     SED_D50AUX = GRIDS(IGRID)%SED_D50(GSEA)*WT
                   ELSE
                     SED_D50AUX = SED_D50AUX + GRIDS(IGRID)%SED_D50(GSEA)*WT
+                  END IF
+                END IF
+              END IF
+#endif
+              !
+#ifdef W3_IC4
+              IF ( FLOGRD(1,11) ) THEN
+                IF ( WDATAS(IGRID)%ICEH(GSEA) .NE. UNDEF ) THEN
+                  SUMWT1(11) = SUMWT1(11) + WT
+                  IF (ICEHAUX .EQ. UNDEF) THEN
+                    ICEHAUX = WDATAS(IGRID)%ICEH(GSEA)*WT
+                  ELSE
+                    ICEHAUX = ICEHAUX + WDATAS(IGRID)%ICEH(GSEA)*WT
                   END IF
                 END IF
               END IF
@@ -2641,6 +2657,17 @@ CONTAINS
                 SED_D50(ISEA) = SED_D50AUX / REAL( SUMGRD )
               ELSE
                 SED_D50(ISEA) = SED_D50(ISEA) + SED_D50AUX / REAL( SUMGRD )
+              END IF
+            END IF
+#endif
+            !
+#ifdef W3_IC4
+            IF ( ICEHAUX .NE. UNDEF ) THEN
+              ICEHAUX = ICEHAUX / SUMWT1(11)
+              IF ( ICEH(ISEA) .EQ. UNDEF )  THEN
+                ICEH(ISEA) = ICEHAUX / REAL( SUMGRD )
+              ELSE
+                ICEH(ISEA) = ICEH(ISEA) + ICEHAUX / REAL( SUMGRD )
               END IF
             END IF
 #endif
