@@ -839,6 +839,11 @@ CONTAINS
       I = 1
       J = 10
 #endif
+#ifdef W3_IC4
+    CASE('IC1')
+      I = 1
+      J = 11
+#endif
 #ifdef W3_IS2
     CASE('IC1')
       I = 1
@@ -3129,6 +3134,10 @@ CONTAINS
               WRITE ( NDSOA,* ) 'SED_D50:', SED_D50(1:NSEA)
 #endif
 #endif
+#ifdef W3_IC4
+            ELSE IF (IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
+              WRITE (NDSOG ) ICEH(1:NSEA)
+#endif
 #ifdef W3_IS2
             ELSE IF (IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
               WRITE (NDSOG ) ICEH(1:NSEA)
@@ -3754,6 +3763,10 @@ CONTAINS
 #ifdef W3_BT4
             ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 10 ) THEN
               READ (NDSOG,IOSTAT=IERR) SED_D50(1:NSEA)
+#endif
+#ifdef W3_IC4
+            ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
+              READ (NDSOG,IOSTAT=IERR) ICEH(1:NSEA)
 #endif
 #ifdef W3_IS2
             ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
