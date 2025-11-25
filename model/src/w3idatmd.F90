@@ -159,7 +159,7 @@ MODULE W3IDATMD
   !/
   INTEGER                 :: NIDATA = -1, IIDATA = -1
 
-  INTEGER                 :: JFIRST = 1
+  INTEGER                 :: JFIRST = -7
 
 #ifdef W3_TIDE
   INTEGER                 :: NTIDE   ! number of tidal constituents
