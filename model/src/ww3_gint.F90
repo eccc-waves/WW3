@@ -1363,6 +1363,9 @@ CONTAINS
         !
         ! Reset the status map
         !
+        ! First, clear the lower 4 bits (ice, dry, land, mask)
+        MAPST2(IY,IX) = (MAPST2(IY,IX)/16)*16
+        ! Then set the new status
         MAPST2(IY,IX) = MAPST2(IY,IX) + MAPICE + 2*MAPDRY + 4*MAPLND +     &
              8*MAPMSK
         ACTIVE =  (MAPICE .NE. 1 .AND. MAPDRY .NE. 1 .AND. MAPLND .NE. 1   &
