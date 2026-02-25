@@ -312,6 +312,10 @@ CONTAINS
     !
     !     10) Meylan et al. 2021 (Ocean Modeling): ocean-wave attenuation 
     !         due to scattering by sea ice floes. 
+    !
+    !     11) Sutherland et al. (2019) beta = 0.25 * eh * w**3 where 0<=e<=1
+    !         and h is ice thickness. No need to convert to alpha using Cg
+    !         not dependent on dispersion relation
     !     ------------------------------------------------------------------
     !
     !     For all methods, the user can specify namelist
@@ -402,7 +406,7 @@ CONTAINS
     ! 10. Source code :
     !
     !/ ------------------------------------------------------------------- /
-    USE CONSTANTS, ONLY: TPI
+    USE CONSTANTS, ONLY: TPI, GRAV
     USE W3ODATMD, ONLY: NDSE
     USE W3SERVMD, ONLY: EXTCDE
     USE W3GDATMD, ONLY: NK, NTH, NSPEC, SIG, MAPWN, IC4PARS, DDEN, &
@@ -744,6 +748,27 @@ CONTAINS
         endif
           WN_I(IK) = ALPHA(IK) * 0.5
         end do
+
+    CASE (11)  
+      ! Sutherland et al. AOR. Thickness dependent
+      NML_INPUT=.TRUE.
+      IF (INFLAGS2(-6).OR.INFLAGS2(-5)) NML_INPUT=.FALSE.
+
+      ! ICECOEF2 is the epsilon parameter 
+      IF(NML_INPUT)THEN ! get ice thickness fraction from namelist array
+        Chf=IC4_CN(1) ! Denoted as same in documentation
+      ELSE ! get from input-field array (ICEP1 etc.)
+        Chf=ICECOEF2 ! Denoted as same in documentation
+      ENDIF
+
+      ! Rename variable, for clarity
+      hice=MAX(0.0,ICECOEF1) ! For this method, ICECOEF1 is ice thickness, which cannot be less than zero
+
+      DO IK=1,NK
+        ALPHA(IK)  = 0.25 *Chf*hice*(SIG(IK)**3) / (GRAV * CG(IK)) ! divide by CG as attenuation is in time
+        WN_I(IK) = 0.5 * ALPHA(IK)
+      END DO
+
 
     CASE DEFAULT
       WN_I = ICECOEF1 !Default to IC1: Uniform in k
