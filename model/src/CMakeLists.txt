@@ -47,7 +47,7 @@ target_include_directories(ww3_lib
 
 # Set compiler flags.
 if(CMAKE_Fortran_COMPILER_ID MATCHES "^(Intel)$")
-  set(compile_flags -no-fma -ip -g -traceback -i4 -real-size 32 -fp-model precise
+  set(compile_flags -no-fma -heap-arrays -ip -g -traceback -i4 -real-size 32 -fp-model precise
     -assume byterecl -fno-alias -fno-fnalias)
   # -sox only works on Linux
   if(LINUX)
@@ -65,6 +65,14 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "^(Intel)$")
     set(CMAKE_Fortran_ARCHIVE_FINISH "<CMAKE_RANLIB> -c <TARGET>")
     set(CMAKE_C_ARCHIVE_FINISH "<CMAKE_RANLIB> -c <TARGET>")
   endif()
+
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^(IntelLLVM)$")
+  # IntelLLVM (ifx/ifc) - new compiler based on LLVM
+  set(compile_flags -no-fma -heap-arrays -g -traceback -i4 -real-size 32 -fp-model precise
+    -assume byterecl)
+  set(compile_flags_release -O3)
+  set(compile_flags_debug -O0 "SHELL:-debug all" "SHELL:-warn all" "SHELL:-check all" -check noarg_temp_created -fp-stack-check -heap-arrays -traceback -fpe0)
+
 
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^(GNU)$")
   set(compile_flags -g -fno-second-underscore -ffree-line-length-none)
@@ -90,6 +98,30 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   set(compile_flags_release -O3)
   set(compile_flags_debug -O0 -Rbcps -Ktrap=fp)
 endif()
+
+# Set linker flags
+if(CMAKE_Fortran_COMPILER_ID MATCHES "^(Intel|IntelLLVM)$")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -static_mpi -static-intel -static-libgcc -static-libstdc++ -nostrip")
+  message(STATUS "Intel linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
+endif()
+
+# ========== PRINT ALL COMPILATION FLAGS ==========
+message(STATUS "=======================================================")
+message(STATUS "WW3 COMPILATION FLAGS SUMMARY")
+message(STATUS "=======================================================")
+message(STATUS "Compiler ID: ${CMAKE_Fortran_COMPILER_ID}")
+message(STATUS "Compiler: ${CMAKE_Fortran_COMPILER}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "-------------------------------------------------------")
+message(STATUS "Base compile flags: ${compile_flags}")
+message(STATUS "Release flags: ${compile_flags_release}")
+message(STATUS "Debug flags: ${compile_flags_debug}")
+message(STATUS "-------------------------------------------------------")
+message(STATUS "CMAKE_Fortran_FLAGS: ${CMAKE_Fortran_FLAGS}")
+message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_EXE_LINKER_FLAGS: ${CMAKE_EXE_LINKER_FLAGS}")
+message(STATUS "=======================================================")
+
 
 # Executables to always build
 set(programs ww3_strt ww3_grid ww3_bound ww3_outf ww3_outp ww3_trck ww3_grib
