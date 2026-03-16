@@ -104,7 +104,8 @@
       USE W3ADATMD, ONLY: DW, UA, UD, AS, CX, CY, HS, WLM, T0M1, THM,  &
                           THS, FP0, THP0, DTDYN, FCUT,                 &
                           ABA, ABD, UBA, UBD, SXX, SYY, SXY, USERO,    &
-                          PHS, PTP, PLP, PDIR, PSI, PWS, PWST, PNR,     &
+                          PHS, PTP, PLP, PDIR, PSI, PWS, PTHP0, PPE,   &
+                          PT1,PWST, PNR,                               &
                           TAUOX, TAUOY, TAUWIX,                        &
                           TAUWIY, PHIAW, PHIOC, TUSX, TUSY, PRMS, TPMS,&
                           USSX, USSY, MSSX, MSSY, MSCX, MSCY, CHARN,   &
@@ -770,21 +771,21 @@ CONTAINS
 !      print *,'Debug+ appel a FSTD_OPEN ',IU11,STDFILE_NAME
       CALL FSTD_OPEN(STDFILE_NAME, IU11, TYPE, IERR)
 
-       IF (FLFRST) THEN
-          FLFRST = .FALSE.
+!       IF (FLFRST) THEN
+!          FLFRST = .FALSE.
           CALL FSTD_CREATE_GRID (IU11, NX, NY, IDATEC, ITIMEC,     &
                                  XLAT0, XLON0, DLAT, DLON, ETIKET, &
                                  IP1Z, IP2Z, IP3Z, NPAK, GRTYP,    &
                                  IG1P, IG2P, IG3P, IG4P, DATYP,    &
                                  TYPVAR, TRIMIJ)
-       END IF
+!       END IF
      
      IG1 = IP1Z
      IG2 = IP2Z
      IG3 = IP3Z
      IG4 = 0
      WRITE(*,*) 'DEBUG ww3_ousf IG1..IG4 =', IG1,IG2,IG3,IG4
-     WRITE(*,*) 'DEBUG ww3_ousf KIND(IG1)=', KIND(IG1), 'KIND(IG2)=', KIND(IG2)
+     WRITE(*,*) 'DEBUG ww3_ousf KIND(IG1)=', KIND(IG1), 'KIND(IG2)=', KIND(IG2), 'KIND(IG3)=', KIND(IG3), 'KIND(IG4)=', KIND(IG4)
 
 ! Determine valid times of the output fields
 
@@ -1459,6 +1460,114 @@ CONTAINS
              CALL W3S2XY ( NSEA, NSEA, NX, NY, PWS(:,IPART), MAPSF, X1 )
              CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
              WRITE(NDSO,'(A,I1,A)') 'Fractional Coverage - Swell Wave [Partition: ',IPART,']'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+            ELSE IF ( IFI == 4 .AND. IFJ ==  7 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Peak wave direction of partition. - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "PDP0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTHP0(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak wave direction - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell  Peak wave direction of partition - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "PDP1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTHP0(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak wave direction - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Peak wave direction of partition - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "PDP2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PTHP0(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Peak wave direction - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+          ELSE IF ( IFI == 4 .AND. IFJ ==  9 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Peak JONSWAP peak enhancement factor of partition - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "PPE0"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PPE(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'JONSWAP peak enhancement factor of partition - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell JONSWAP peak enhancement factor of partition - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "PPE1"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PPE(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'JONSWAP peak enhancement factor of partition - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell JONSWAP peak enhancement factor of partition - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "PPE2"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PPE(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'JONSWAP peak enhancement factor of partition - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+           ELSE IF ( IFI == 4 .AND. IFJ ==  13 ) THEN
+             !----------------------------------------------------------------------
+             ! Wind Wave Mean wave period (m0,1) of partition - IPART=0
+             !----------------------------------------------------------------------
+             IPART = 0
+             NOM1 = "PT10"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PT1(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean wave period (m0,1) of partition - Wind Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+            CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Primary Swell Mean wave period (m0,1) of partition - IPART=1
+             !----------------------------------------------------------------------
+             IPART = 1
+             NOM1 = "PT11"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PT1(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean wave period (m0,1) of partition - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
+            CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
+            &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
+            &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
+             CALL W3SETMAP( X1,X2,XX,XY,MAPOUT,MAP,MP2,NX,NY,UNDEF )
+             !----------------------------------------------------------------------
+             ! Secondary Swell Mean wave period (m0,1) of partition - IPART=2
+             !----------------------------------------------------------------------
+             IPART = 2
+             NOM1 = "PT12"
+             CALL W3S2XY ( NSEA, NSEA, NX, NY, PT1(:,IPART), MAPSF, X1 )
+             CALL SETMASK(UNDEF,NX,NY,X1,FIELDMASK)
+             WRITE(NDSO,'(A,I1,A)') 'Mean wave period (m0,1) of partition - Swell Wave [Partition: ',IPART,']'//' ('//NOM1//')'
             CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
             &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
