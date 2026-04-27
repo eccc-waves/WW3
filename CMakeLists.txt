@@ -1,7 +1,13 @@
 # CMake build written by Kyle Gerheiser
 
 # Requires CMake 3.19 for JSON strings
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.30)
+
+#----- Append EC specific module path
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_rpn/modules $ENV{EC_CMAKE_MODULE_PATH})
+
+
+include(ec_init)           # Include EC specific cmake utils
 
 # Get VERSION from VERSION file
 file(STRINGS "VERSION" pVersion)
@@ -10,6 +16,11 @@ project(
   WW3
   VERSION ${pVersion}
   LANGUAGES C Fortran)
+
+# Locate MPI libraries for Fortran
+include(ec_compiler_presets)
+
+find_package(MPI REQUIRED COMPONENTS Fortran)
 
 get_directory_property(hasParent PARENT_DIRECTORY)
 if(hasParent)
@@ -38,13 +49,6 @@ list(TRANSFORM EXCLUDE_FIND TOLOWER)
 
 # Make Find modules visible to CMake
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-#----- Append EC specific module path
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_rpn/modules $ENV{EC_CMAKE_MODULE_PATH})
-
-include(ec_init)           # Include EC specific cmake utils
-
-include(ec_compiler_presets)
 
 # Use static MPI libraries: must be set before calling find_package(MPI)
 set(MPI_COMPILER_FLAGS "${MPI_COMPILER_FLAGS} -static_mpi -nostrip")
