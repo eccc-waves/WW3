@@ -413,7 +413,7 @@ CONTAINS
                         IC4_KI, IC4_FC, IC4_CN, NIC4, IC4_FMIN,    &
                         IC4_KIBK
     USE W3IDATMD, ONLY: ICEP1, ICEP2, ICEP3, ICEP4, ICEP5, &
-                        MUDT, MUDV, MUDD, INFLAGS2
+                        MUDT, MUDV, MUDD, INFLAGS2, ICEI
 
 #ifdef W3_T
     USE W3ODATMD, ONLY: NDST
@@ -450,7 +450,7 @@ CONTAINS
     REAL                    :: D1D(NK), EB(NK)
     REAL                    :: ICECOEF1, ICECOEF2, ICECOEF3, &
                                ICECOEF4, ICECOEF5, ICECOEF6, &
-                               ICECOEF7, ICECOEF8
+                               ICECOEF7, ICECOEF8, ICECONC
     REAL                    :: CICE1,CICE2,CICE3,CICE4,CICE5 ! temporary variables
     REAL                    :: KI1,KI2,KI3,KI4,FC5,FC6,FC7
     REAL                    :: HS, EMEAN, HICE
@@ -462,6 +462,7 @@ CONTAINS
     REAL, ALLOCATABLE       :: KARG1(:), KARG2(:), KARG3(:) !Arguments for M3
     REAL                    :: x1,x2,x3,x1sqr,x2sqr,x3sqr   !Arguments for M10
     REAL                    :: perfour,amhb,bmhb            !Arguments for M10
+    REAL                    :: scal,reg,growth,hmin      !Arguments for M12
     LOGICAL                 :: NML_INPUT ! if using namelist input for M2
 
     !/
@@ -500,6 +501,7 @@ CONTAINS
     ICECOEF8 = 0.0
     HS       = 0.0
     HICE     = 0.0
+    ICECONC  = 0.0
     EMEAN    = 0.0
     FREQ=SIG/TPI
     !
@@ -766,6 +768,34 @@ CONTAINS
 
       DO IK=1,NK
         ALPHA(IK)  = 0.25 *Chf*hice*(SIG(IK)**3) / (GRAV * CG(IK)) ! divide by CG as attenuation is in time
+        WN_I(IK) = 0.5 * ALPHA(IK)
+      END DO
+
+    CASE (12)  
+      ! Sutherland et al. AOR. Thickness derived from ICECONC
+      NML_INPUT=.TRUE.
+      IF (INFLAGS2(-6).OR.INFLAGS2(-5)) NML_INPUT=.FALSE.
+
+      ! ICECOEF2 is the epsilon parameter 
+      IF(NML_INPUT)THEN ! get ice thickness fraction from namelist array
+        Chf=IC4_CN(1) ! Denoted as same in documentation
+      ELSE ! get from input-field array (ICEP1 etc.)
+        Chf=ICECOEF2 ! Denoted as same in documentation
+      ENDIF
+
+      ! Rename variable, for clarity
+      ICECONC = MAX(0.0,ICEI(IX,IY))
+      ! Could make the bottom parameters part of grid input flag. Hard-coded for now.
+      hmin = 0.0
+      growth = 0.9
+      reg = 0.01
+      scal = 0.3 ! will not represent multi-year pack ice, but should be ok for MIZ
+      hice = MAX(0.0,hmin + scal*(ICECONC/(1.0-ICECONC+reg))**growth) ! For this method, ICECOEF1 is ice thickness, which cannot be less than zero
+
+      DO IK=1,NK
+        ALPHA(IK)  = 0.25 *Chf*hice*(SIG(IK)**3) / (GRAV * CG(IK)) 
+        ! divide by CG as attenuation is in time. 
+        ! Below it is multiplied by CG to calculate D1D in time as spatial and temporal decay related by CG
         WN_I(IK) = 0.5 * ALPHA(IK)
       END DO
 
