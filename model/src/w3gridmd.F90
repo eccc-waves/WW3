@@ -3089,6 +3089,7 @@ CONTAINS
 #endif
     WRITE (NDSO,961) CICE0, CICEN
     WRITE (NDSO,8972) ICEWIND
+    WRITE (NDSO,8973) ICESNL
     FICE0  = CICE0
     ! Variables for Space-Time Extremes
     STEXU = STDX
@@ -6852,6 +6853,11 @@ CONTAINS
          /'         ice :',F6.2, &
          /'         (0.0==> no reduction and 1.0==> no wind', &
          /'         input with 100% ice cover)')
+8973 FORMAT ( '       Nonlinear interaction reduction factor in presence of ', &
+         /'         ice :',F6.2, &
+         /'         (0.0==> no reduction and 1.0==> no NL interactions', &
+         /'         with 100% ice cover)')
+
     !
     !
 4970 FORMAT (/'  Spectral output on full grid ',A/                   &
