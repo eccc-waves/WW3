@@ -171,6 +171,7 @@ MODULE WMMDATMD
   !      MINIT, MSKINI, FLDATn
   !                Log.  Public   Flags for array initializations.
   !      FLLSTI    Log.  Public   FLag for last ice per grid.
+  !      FLLSTI1   Log.  Public   FLag for last ic1 per grid.
   !      FLLSTL    Log.  Public   FLag for last level per grid.
   !      FLLSTR    Log.  Public   FLag for last air density per grid.
   !
