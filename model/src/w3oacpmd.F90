@@ -204,9 +204,11 @@ CONTAINS
     !/ ------------------------------------------------------------------- /
     !
     USE CONSTANTS, ONLY: RADIUS, DERA
-    USE W3GDATMD,  ONLY: NX, NY, FLAGLL, XGRD, YGRD, MAPSTA, &
-         & HPFAC, HQFAC, GTYPE, &
-         & UNGTYPE, RLGTYPE, CLGTYPE, SMCTYPE
+    USE W3GDATMD, ONLY: NX, NY, NSEA, FLAGLL, &
+                    XGRD, YGRD, MAPSTA, MAPSF, &
+                    HPFAC, HQFAC, GTYPE, &
+                    UNGTYPE, RLGTYPE, CLGTYPE, SMCTYPE, &
+                    NTRI, TRIGP, TRIA
 #ifdef W3_SMC
     USE W3GDATMD,  ONLY: NSEA, X0, Y0, MRFct, SX, SY, IJKCel
 #endif
@@ -225,6 +227,8 @@ CONTAINS
     !/
     INTEGER, ALLOCATABLE :: MASK(:,:)
     INTEGER              :: I, IX, IY, NXW, NXE, NYS, NYN, INODE, IERR_MPI
+    INTEGER              :: IT, N1, N2, N3
+    INTEGER              :: ISEA
     REAL, ALLOCATABLE    :: LON(:,:),LAT(:,:),AREA(:,:),      &
          CORLON(:,:,:),CORLAT(:,:,:)
     REAL                 :: FACTOR
@@ -324,16 +328,60 @@ CONTAINS
         ENDDO
 #endif
         !
-      ELSE
+      ELSE IF (GTYPE .EQ. UNGTYPE) THEN
         !
-        ! 1.3. Unstructured grids
+        ! 1.3. Unstructured Grid
         ! ----------------------------------
-        WRITE(*,*) 'TO BE IMPLEMENT FOR UNSTRUCTURED GRIDS'
+      
+        NNODES = NSEA
+      
+        ALLOCATE ( LON(NNODES,1), LAT(NNODES,1) )
+        ALLOCATE ( AREA(NNODES,1) )
+        ALLOCATE ( MASK(NNODES,1) )
+      
+        LON  = 0.
+        LAT  = 0.
+        AREA = 0.
+        MASK = 1
+      
+        DO ISEA = 1 , NSEA
+      
+           IX = MAPSF(ISEA,1)
+           IY = MAPSF(ISEA,2)
+      
+           LON(ISEA,1) = REAL(XGRD(IY,IX))
+           LAT(ISEA,1) = REAL(YGRD(IY,IX))
+      
+           IF (MAPSTA(IY,IX) .EQ. 1) THEN
+              MASK(ISEA,1) = 0
+           ELSE
+              MASK(ISEA,1) = 1
+           END IF
+      
+        END DO
+      
+        DO IT = 1 , NTRI
+      
+           N1 = TRIGP(1,IT)
+           N2 = TRIGP(2,IT)
+           N3 = TRIGP(3,IT)
+      
+           AREA(N1,1) = AREA(N1,1) + REAL(TRIA(IT))/3.
+           AREA(N2,1) = AREA(N2,1) + REAL(TRIA(IT))/3.
+           AREA(N3,1) = AREA(N3,1) + REAL(TRIA(IT))/3.
+      
+        END DO
+
+      ELSE
+
+        WRITE(*,*) 'UNKNOWN GRID'
         STOP
       END IF
       !
       CALL OASIS_WRITE_GRID('ww3t',NNODES,1,LON,LAT)
-      CALL OASIS_WRITE_CORNER('ww3t',NNODES,1,4,CORLON,CORLAT)
+      IF (GTYPE .NE. UNGTYPE) THEN
+         CALL OASIS_WRITE_CORNER('ww3t',NNODES,1,4,CORLON,CORLAT)
+      END IF
       CALL OASIS_WRITE_AREA('ww3t',NNODES,1,AREA)
       CALL OASIS_WRITE_MASK('ww3t',NNODES,1,MASK)
       !
