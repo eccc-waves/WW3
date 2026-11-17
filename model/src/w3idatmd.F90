@@ -159,7 +159,15 @@ MODULE W3IDATMD
   !/
   INTEGER                 :: NIDATA = -1, IIDATA = -1
 
+
+    ! If using experimental mud or ice physics read fields starting
+    ! at lower JFIRST than default "JFIRST=1"
+#if defined(W3_IC1) || defined(W3_IC2) || defined(W3_IS2) || defined(W3_IC3) || defined(W3_IC4) || defined(W3_IC5) || defined(W3_BT8) || defined(W3_BT9) 
+  INTEGER                 :: JFIRST = -7
+#else
   INTEGER                 :: JFIRST = 1
+#endif
+
 
 #ifdef W3_TIDE
   INTEGER                 :: NTIDE   ! number of tidal constituents
