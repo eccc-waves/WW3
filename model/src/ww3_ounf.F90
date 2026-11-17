@@ -1284,12 +1284,10 @@ CONTAINS
               NFIELD=1
 #endif
               !
-#ifdef W3_IS2
               ! Ice thickness
             ELSE IF (IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
               CALL S2GRID(ICEH(1:NSEA), X1)
               NFIELD=1
-#endif
               !
 #ifdef W3_IS2
               ! Maximum ice floe diameter

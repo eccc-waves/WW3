@@ -155,7 +155,7 @@ PROGRAM W3OUTF
   USE W3IOGOMD, ONLY: W3IOGO, W3READFLGRD
   !/
   USE W3GDATMD
-  USE W3WDATMD, ONLY: TIME, WLV, ICE, BERG, UST, USTDIR, RHOAIR
+  USE W3WDATMD, ONLY: TIME, WLV, ICE, BERG, UST, USTDIR, RHOAIR, ICEH
   USE W3ADATMD, ONLY: DW, UA, UD, AS, CX, CY, HS, WLM, T0M1, THM, &
        THS, FP0, THP0, DTDYN, FCUT,                &
        ABA, ABD, UBA, UBD, SXX, SYY, SXY, USERO,   &
@@ -174,7 +174,7 @@ PROGRAM W3OUTF
   USE W3ODATMD, ONLY: NDSO, NDSE, NDST, NOGRP, NGRPP, IDOUT,      &
        UNDEF, FLOGRD, FNMPRE, NOSWLL
 #ifdef W3_IS2
-  USE W3WDATMD, ONLY: ICEH, ICEF
+  USE W3WDATMD, ONLY: ICEF
 #endif
   !
   IMPLICIT NONE
@@ -981,7 +981,6 @@ CONTAINS
             ENDIF
 #endif
             !
-#ifdef W3_IS2
           ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
             FLONE = .TRUE.
             FSC = 0.001
@@ -992,7 +991,6 @@ CONTAINS
             ELSE
               CALL W3S2XY (NSEA, NSEA, NX+1, NY, ICEH, MAPSF, X1 )
             ENDIF
-#endif
             !
 #ifdef W3_IS2
           ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 12) THEN

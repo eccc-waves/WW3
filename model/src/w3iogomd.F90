@@ -839,10 +839,10 @@ CONTAINS
       I = 1
       J = 10
 #endif
-#ifdef W3_IS2
     CASE('IC1')
       I = 1
       J = 11
+#ifdef W3_IS2
     CASE('IC5')
       I = 1
       J = 12
@@ -2513,7 +2513,7 @@ CONTAINS
     USE W3ADATMD, ONLY: W3SETA, W3DIMA, W3XETA
     USE W3ODATMD, ONLY: W3SETO
     !/
-    USE W3WDATMD, ONLY: TIME, DINIT, WLV, ICE, BERG,                &
+    USE W3WDATMD, ONLY: TIME, DINIT, WLV, ICE, ICEH, BERG,          &
          UST,  USTDIR, ASF, RHOAIR
     USE W3ADATMD, ONLY: AINIT, DW, UA, UD, AS, CX, CY, WN,          &
          TAUA, TAUADIR
@@ -2548,7 +2548,7 @@ CONTAINS
     USE W3SERVMD, ONLY: STRACE
 #endif
 #ifdef W3_IS2
-    USE W3WDATMD, ONLY: ICEF, ICEH
+    USE W3WDATMD, ONLY: ICEF
 #endif
     !
     IMPLICIT NONE
@@ -3129,12 +3129,12 @@ CONTAINS
               WRITE ( NDSOA,* ) 'SED_D50:', SED_D50(1:NSEA)
 #endif
 #endif
-#ifdef W3_IS2
             ELSE IF (IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
               WRITE (NDSOG ) ICEH(1:NSEA)
 #ifdef W3_ASCII
               WRITE (NDSOA,* ) 'ICEH:', ICEH(1:NSEA)
 #endif
+#ifdef W3_IS2
             ELSE IF (IFI .EQ. 1 .AND. IFJ .EQ. 12 ) THEN
               WRITE (NDSOG ) ICEF(1:NSEA)
 #ifdef W3_ASCII
@@ -3755,9 +3755,9 @@ CONTAINS
             ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 10 ) THEN
               READ (NDSOG,IOSTAT=IERR) SED_D50(1:NSEA)
 #endif
-#ifdef W3_IS2
             ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 11 ) THEN
               READ (NDSOG,IOSTAT=IERR) ICEH(1:NSEA)
+#ifdef W3_IS2
             ELSE IF ( IFI .EQ. 1 .AND. IFJ .EQ. 12 ) THEN
               READ (NDSOG,IOSTAT=IERR) ICEF(1:NSEA)
 #endif
