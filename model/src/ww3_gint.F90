@@ -1150,11 +1150,11 @@ CONTAINS
     RHOAIR   = UNDEF
     TAUA     = UNDEF
     TAUADIR  = UNDEF
+    ICEH     = UNDEF
 #ifdef W3_BT4
     SED_D50  = UNDEF
 #endif
 #ifdef W3_IS2
-    ICEH     = UNDEF
     ICEF     = UNDEF
 #endif
     !
@@ -1666,7 +1666,6 @@ CONTAINS
               END IF
 #endif
               !
-#ifdef W3_IS2
               IF ( FLOGRD(1,11) ) THEN
                 IF ( WDATAS(IGRID)%ICEH(GSEA) .NE. UNDEF ) THEN
                   SUMWT1(11) = SUMWT1(11) + WT
@@ -1677,7 +1676,6 @@ CONTAINS
                   END IF
                 END IF
               END IF
-#endif
               !
 #ifdef W3_IS2
               IF ( FLOGRD(1,12) ) THEN
@@ -2644,7 +2642,6 @@ CONTAINS
             END IF
 #endif
             !
-#ifdef W3_IS2
             IF ( ICEHAUX .NE. UNDEF ) THEN
               ICEHAUX = ICEHAUX / SUMWT1(11)
               IF ( ICEH(ISEA) .EQ. UNDEF )  THEN
@@ -2653,7 +2650,6 @@ CONTAINS
                 ICEH(ISEA) = ICEH(ISEA) + ICEHAUX / REAL( SUMGRD )
               END IF
             END IF
-#endif
             !
 #ifdef W3_IS2
             IF ( ICEFAUX .NE. UNDEF ) THEN

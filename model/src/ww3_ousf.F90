@@ -965,8 +965,7 @@ CONTAINS
             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
             &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
 #endif
-#ifdef W3_IS2
-          ELSE IF ( IFI == 1 .AND. IFJ ==  9 ) THEN
+          ELSE IF ( IFI == 1 .AND. IFJ ==  11 ) THEN
              !----------------------------------------------------------------------
              ! Ice thickness
              !----------------------------------------------------------------------
@@ -977,7 +976,8 @@ CONTAINS
             CALL FSTD_WRITE_FIELD(IU11,X1,FIELDMASK,NX,NY,NOM1,IDATEO,        &
             &             ETIKET,IDEET,R4HOUR,0,EIP2,EIP3,SCAL_PAR,         &
             &             GRTYP,IG1,IG2,IG3,NPAK,DATYP,TYPVAR(1:1)//'@',TRIMIJ)
-          ELSE IF ( IFI == 1 .AND. IFJ ==  10 ) THEN
+#ifdef W3_IS2
+          ELSE IF ( IFI == 1 .AND. IFJ ==  12 ) THEN
              !----------------------------------------------------------------------
              ! Ice flow diameter
              !----------------------------------------------------------------------

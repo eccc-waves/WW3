@@ -2750,7 +2750,11 @@ CONTAINS
     CICEN  = 0.5
     LICE   = 0.
     ICEHFAC= 1.0
+#ifdef W3_IS2
     ICEHMIN= 0.2  ! the 0.2 value is arbitrary and needs to be tuned.
+#else
+    ICEHMIN= 0.0  ! the 0.2 value is arbitrary and needs to be tuned.
+#endif
     ICEHINIT= 0.5
     ICESLN = 1.0
     ICEWIND= 1.0
